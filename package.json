@@ -1,0 +1,6 @@
+{
+  "name": "bist-radar",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=24" }
+}

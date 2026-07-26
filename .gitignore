@@ -1,0 +1,5 @@
+data/bars/
+data/*.meta.json
+.venv/
+node_modules/
+__pycache__/

@@ -3,3 +3,9 @@ data/*.meta.json
 .venv/
 node_modules/
 __pycache__/
+
+# Next.js
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo

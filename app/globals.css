@@ -1,0 +1,253 @@
+/*
+ * Tasarım token'ları — kaynak: ../design_handoff_bist_radar (Nocturne design system
+ * + BIST Radar.dc.html). Renkler ve ölçüler birebir taşınmıştır; bkz.
+ * tasks/01-nextjs-ui.md "Tasarım token'ları" ve handoff README "Design Tokens".
+ */
+:root {
+  --color-bg: #161826;
+  --color-surface: #232532;
+  --color-text: #e9e9ed;
+  --color-accent: #9184d9;
+  --color-divider: color-mix(in srgb, #e9e9ed 16%, transparent);
+
+  --color-neutral-100: #f3f5fe;
+  --color-neutral-200: #e4e7f5;
+  --color-neutral-300: #cfd3e5;
+  --color-neutral-400: #b2b6ca;
+  --color-neutral-500: #9397ab;
+  --color-neutral-600: #75798c;
+  --color-neutral-700: #595d6c;
+  --color-neutral-800: #3f424d;
+  --color-neutral-900: #292b31;
+
+  --color-accent-100: #f5f4ff;
+  --color-accent-200: #e7e5fe;
+  --color-accent-300: #d2cefd;
+  --color-accent-400: #b5abfc;
+  --color-accent-500: #968ae0;
+  --color-accent-600: #796cbf;
+  --color-accent-700: #5d5294;
+  --color-accent-800: #423a6a;
+  --color-accent-900: #2b2741;
+
+  --font-heading: var(--font-inter, "Inter"), system-ui, sans-serif;
+  --font-heading-weight: 500;
+  --font-body: var(--font-inter, "Inter"), system-ui, sans-serif;
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 14px;
+
+  --shadow-lg: 0 0 0 1px #9397ab, 0 16px 40px rgba(0, 0, 0, 0.65);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  /* Sayfa scroll etmez — yalnızca tablo ve filtre paneli kendi içinde scroll eder. */
+  overflow: hidden;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-body);
+}
+
+body {
+  font-size: 12.5px;
+  line-height: 1.5;
+  font-weight: 400;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-neutral-700) transparent;
+}
+
+:focus {
+  outline: none;
+}
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+::selection {
+  background: color-mix(in srgb, var(--color-accent) 30%, transparent);
+}
+
+input[type="range"] {
+  accent-color: var(--color-accent);
+}
+
+button {
+  font-family: inherit;
+}
+
+/* — tag — */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  padding: 3px 10px;
+  border-radius: calc(var(--radius-md) * 0.75);
+}
+.tag-outline {
+  border: 1px solid var(--color-accent);
+  color: var(--color-accent);
+}
+
+/* — buttons — */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  text-decoration: none;
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: 12.5px;
+  line-height: 1.2;
+  color: var(--color-text);
+  background: transparent;
+  border: 1px solid transparent;
+  padding: 6px 10px;
+  border-radius: var(--radius-md);
+}
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.btn-ghost {
+  color: var(--color-accent);
+}
+.btn-ghost:hover {
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+}
+.btn-ghost:active {
+  background: color-mix(in srgb, var(--color-accent) 18%, transparent);
+}
+.btn-secondary {
+  border-color: var(--color-divider);
+}
+.btn-secondary:hover {
+  background: color-mix(in srgb, var(--color-text) 7%, transparent);
+}
+.btn-secondary:active {
+  background: color-mix(in srgb, var(--color-text) 14%, transparent);
+}
+
+/* — inputs — */
+.input {
+  min-height: 32px;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--color-text);
+  caret-color: var(--color-accent);
+  background: var(--color-surface);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+}
+.input:hover {
+  border-color: color-mix(in srgb, var(--color-text) 45%, transparent);
+}
+.input:focus-visible {
+  border-color: var(--color-accent);
+  outline-offset: 0;
+}
+.input::placeholder {
+  color: var(--color-neutral-500);
+}
+
+/* — zaman dilimi segmented control — */
+.seg {
+  display: flex;
+  flex: none;
+  border: 1px solid var(--color-neutral-700);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.seg-btn {
+  padding: 5px 14px;
+  font-size: 12px;
+  border: 0;
+  background: transparent;
+  color: var(--color-neutral-300);
+  cursor: pointer;
+}
+.seg-btn:hover {
+  color: var(--color-accent-200);
+}
+.seg-btn.active {
+  background: color-mix(in oklab, var(--color-accent) 18%, transparent);
+  color: var(--color-accent-100);
+}
+
+/* — sinyal filtre chip'leri — */
+.chip {
+  padding: 4px 11px;
+  border-radius: 99px;
+  border: 1px solid var(--color-neutral-700);
+  background: transparent;
+  color: var(--color-neutral-300);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.chip.active {
+  border-color: var(--color-accent);
+  background: color-mix(in oklab, var(--color-accent) 14%, transparent);
+  color: var(--color-accent-100);
+}
+
+/* — tablo — */
+.scan-table {
+  width: 100%;
+  min-width: 1060px;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+.scan-table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--color-bg);
+  text-align: right;
+  padding: 8px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--color-neutral-400);
+  white-space: nowrap;
+  border-bottom: 1px solid var(--color-neutral-700);
+}
+.scan-table th.sortable {
+  cursor: pointer;
+}
+.scan-table th.col-symbol,
+.scan-table td.col-symbol {
+  text-align: left;
+  padding-left: 16px;
+}
+.scan-table th.col-pctb,
+.scan-table td.col-pctb {
+  padding-right: 16px;
+}
+.scan-table th.col-signal,
+.scan-table td.col-signal {
+  text-align: center;
+}
+.scan-table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid color-mix(in oklab, var(--color-neutral-800) 55%, transparent);
+  font-variant-numeric: tabular-nums;
+}
+.scan-table tbody tr:hover {
+  background: color-mix(in oklab, var(--color-accent) 7%, transparent);
+}

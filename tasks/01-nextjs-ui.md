@@ -1,8 +1,12 @@
 # Görev 01 — Next.js iskeleti + Tarama ana ekranı
 
-**Atanan tier:** 2 (standart implementasyon) — `gpt-5.6-sol`, effort `medium`
-**Kota durumu:** Claude Max havuzu normal, uyarı yok. Codex tercih edilen havuz; geri dönüş Claude Sonnet subagent.
+**Durum:** TAMAMLANDI 2026-07-27 — Sonnet subagent uyguladı, ana oturum inceledi ve birleştirdi.
+**Atanan tier:** 2 (standart implementasyon) — Sonnet 5 subagent
 **Tek yazar:** Bu görev süresince `bist-radar/` çalışma ağacının tek yazarı sensin.
+
+> Not: bu brief ilk olarak Codex'e yazılmıştı; Codex `HTTP 402 deactivated_workspace` ile
+> düştüğü için iş Sonnet subagent'a kaydırıldı. Kontrat 2026-07-27'de Codex'i tamamen
+> çıkaracak şekilde güncellendi (`../../AGENTS.md`), tier ataması ona göre düzeltildi.
 
 ## Amaç
 

@@ -206,12 +206,65 @@ button {
   color: var(--color-accent-100);
 }
 
+/* — ekran okuyucu için görsel olarak gizli metin (bkz. .col-star başlığı) — */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* — takip listesi yıldız düğmesi (bkz. tasks/06-takip-listesi-ve-kolonlar.md §A,
+   components/StarButton.tsx) — accent tonu KULLANIR, yeşil/kırmızı ASLA (o renkler
+   fiyat/sinyal içindir). */
+.star-btn {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-neutral-500);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+.star-btn:hover {
+  color: var(--color-accent-200);
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+}
+.star-btn:active {
+  background: color-mix(in srgb, var(--color-accent) 18%, transparent);
+}
+.star-btn.active {
+  color: var(--color-accent-300);
+}
+/* ≥44×44px dokunma hedefi (mobil, StockCard) — görev "Kapsam" §A. */
+.star-btn.star-btn-lg {
+  width: 44px;
+  height: 44px;
+}
+
 /* — tablo — */
 .scan-table {
   width: 100%;
   min-width: 1060px;
   border-collapse: collapse;
   font-size: 12.5px;
+}
+.scan-table th.col-star,
+.scan-table td.col-star {
+  width: 40px;
+  text-align: center;
+  padding-left: 10px;
+  padding-right: 2px;
 }
 .scan-table th {
   position: sticky;
@@ -242,6 +295,12 @@ button {
 .scan-table th.col-signal,
 .scan-table td.col-signal {
   text-align: center;
+}
+/* Kolon sürükle-bırak (tasks/06-takip-listesi-ve-kolonlar.md §B) — sürüklenen
+   başlığın görsel geri bildirimi; taşıma MANTIĞI bu sınıfa bağlı değildir
+   (components/ScanTable.tsx `handleDrop`, `dataTransfer`den okur), yalnızca kozmetik. */
+.scan-table th.col-dragging {
+  opacity: 0.4;
 }
 .scan-table td {
   padding: 7px 10px;

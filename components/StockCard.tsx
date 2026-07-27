@@ -11,15 +11,33 @@
 import { changeColor, scoreColor, signalTagColor } from "../lib/colors";
 import { formatChange, formatInt, formatPrice } from "../lib/format";
 import type { RowData } from "../lib/types";
+import StarButton from "./StarButton";
 
 interface StockCardProps {
   row: RowData;
   onSelect: (symbol: string) => void;
+  /** Takip listesi (tasks/06-takip-listesi-ve-kolonlar.md §A). */
+  isWatched: boolean;
+  onToggleWatch: () => void;
 }
 
-export default function StockCard({ row, onSelect }: StockCardProps) {
+export default function StockCard({ row, onSelect, isWatched, onToggleWatch }: StockCardProps) {
   return (
-    <button type="button" className="mobile-card" onClick={() => onSelect(row.symbol)}>
+    // `<button>` DEĞİL: içinde StarButton (kendi `<button>`'ı) var, buton içinde buton
+    // geçersiz HTML olurdu. `role="button"` + `tabIndex`/`onKeyDown` ile klavye
+    // erişilebilirliği (Enter/Boşluk) native butonla AYNI kalır.
+    <div
+      className="mobile-card"
+      role="button"
+      tabIndex={0}
+      onClick={() => onSelect(row.symbol)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect(row.symbol);
+        }
+      }}
+    >
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10 }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 16, letterSpacing: "0.01em" }}>
@@ -38,19 +56,22 @@ export default function StockCard({ row, onSelect }: StockCardProps) {
             {row.name}
           </div>
         </div>
-        <div style={{ textAlign: "right", flex: "none" }}>
-          <div
-            style={{
-              fontFamily: "var(--font-heading)",
-              fontWeight: 600,
-              fontSize: 15,
-              fontVariantNumeric: "tabular-nums",
-            }}
-          >
-            {formatPrice(row.price)}
-          </div>
-          <div style={{ color: changeColor(row.chg), fontWeight: 600, fontSize: 13.5, marginTop: 2 }}>
-            {formatChange(row.chg)}
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 6, flex: "none" }}>
+          <StarButton active={isWatched} onToggle={onToggleWatch} large />
+          <div style={{ textAlign: "right", flex: "none" }}>
+            <div
+              style={{
+                fontFamily: "var(--font-heading)",
+                fontWeight: 600,
+                fontSize: 15,
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              {formatPrice(row.price)}
+            </div>
+            <div style={{ color: changeColor(row.chg), fontWeight: 600, fontSize: 13.5, marginTop: 2 }}>
+              {formatChange(row.chg)}
+            </div>
           </div>
         </div>
       </div>
@@ -122,6 +143,6 @@ export default function StockCard({ row, onSelect }: StockCardProps) {
           Dipnot değil, listenin en değerli bilgisi: brief "gövde ≥ 14px" kısıtı
           burada tam olarak uygulanır (14px, tesadüf değil). */}
       <div style={{ fontSize: 14, lineHeight: 1.45, color: "var(--color-neutral-200)" }}>{row.topReason}</div>
-    </button>
+    </div>
   );
 }

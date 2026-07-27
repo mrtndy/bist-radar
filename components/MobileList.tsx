@@ -25,9 +25,19 @@ interface MobileListProps {
   visibleCount: number;
   onLoadMore: () => void;
   onSelectSymbol: (symbol: string) => void;
+  /** Takip listesi (tasks/06-takip-listesi-ve-kolonlar.md §A) — karta iletilir, StockCard'daki yıldız için. */
+  isWatched: (symbol: string) => boolean;
+  onToggleWatch: (symbol: string) => void;
 }
 
-export default function MobileList({ rows, visibleCount, onLoadMore, onSelectSymbol }: MobileListProps) {
+export default function MobileList({
+  rows,
+  visibleCount,
+  onLoadMore,
+  onSelectSymbol,
+  isWatched,
+  onToggleWatch,
+}: MobileListProps) {
   const visible = rows.slice(0, visibleCount);
   const hasMore = visibleCount < rows.length;
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -62,7 +72,13 @@ export default function MobileList({ rows, visibleCount, onLoadMore, onSelectSym
       }}
     >
       {visible.map((row) => (
-        <StockCard key={row.symbol} row={row} onSelect={onSelectSymbol} />
+        <StockCard
+          key={row.symbol}
+          row={row}
+          onSelect={onSelectSymbol}
+          isWatched={isWatched(row.symbol)}
+          onToggleWatch={() => onToggleWatch(row.symbol)}
+        />
       ))}
       {hasMore ? (
         <button ref={sentinelRef} type="button" className="load-more-btn" onClick={onLoadMore}>

@@ -1,6 +1,8 @@
 "use client";
 
+import { Star } from "@phosphor-icons/react";
 import type { FilterState, SignalFilter } from "../lib/types";
+import { ShareWatchlistButton } from "./WatchlistTab";
 
 const SIGNAL_CHIPS: { value: SignalFilter; label: string }[] = [
   { value: "ALL", label: "Tümü" },
@@ -38,6 +40,10 @@ interface FilterPanelProps {
   sectorOptions: string[];
   matchCount: number;
   totalCount: number;
+  /** Takip listesi (tasks/06-takip-listesi-ve-kolonlar.md §A) — "Takip listem" çipi + paylaş düğmesi. */
+  watchlistSymbols: string[];
+  watchlistOnly: boolean;
+  onToggleWatchlistOnly: () => void;
 }
 
 export default function FilterPanel({
@@ -47,6 +53,9 @@ export default function FilterPanel({
   sectorOptions,
   matchCount,
   totalCount,
+  watchlistSymbols,
+  watchlistOnly,
+  onToggleWatchlistOnly,
 }: FilterPanelProps) {
   return (
     <div
@@ -76,7 +85,30 @@ export default function FilterPanel({
               {chip.label}
             </button>
           ))}
+          {/* "Takip listem" çipi (görev "Kapsam" §Masaüstü) — sinyal çiplerinin YANINDA
+              ama bağımsız bir boyut: diğer filtrelerle AND'lenir (bkz. ScanScreen.tsx
+              `filteredRows`), sıfırlama (Filtreleri sıfırla) ile SIFIRLANMAZ — bu, "hangi
+              hisselerim var" sorusuna bakan farklı bir eksen, skor/sektör filtrelemesi
+              DEĞİL. Yıldız için accent tonu — yeşil/kırmızı YOK (görev "Sert kısıtlar"). */}
+          <button
+            type="button"
+            className={`chip${watchlistOnly ? " active" : ""}`}
+            onClick={onToggleWatchlistOnly}
+            aria-pressed={watchlistOnly}
+          >
+            <Star
+              size={11}
+              weight={watchlistOnly ? "fill" : "regular"}
+              style={{ marginRight: 4, verticalAlign: -1 }}
+            />
+            Takip listem ({watchlistSymbols.length})
+          </button>
         </div>
+        {watchlistSymbols.length > 0 ? (
+          <div style={{ marginTop: 10 }}>
+            <ShareWatchlistButton symbols={watchlistSymbols} />
+          </div>
+        ) : null}
       </div>
 
       <div>

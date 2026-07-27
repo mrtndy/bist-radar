@@ -11,8 +11,12 @@ import SortMenu from "./SortMenu";
 import DetailDrawer from "./DetailDrawer";
 import NewsPanel from "./NewsPanel";
 import NewsList from "./NewsList";
+import WatchlistTab, { WatchlistEmptyState } from "./WatchlistTab";
+import ColumnMenu from "./ColumnMenu";
 import { formatLastUpdated, parseLenient } from "../lib/format";
 import { fetchNewsFeed } from "../lib/news";
+import { useWatchlist } from "../lib/watchlist";
+import { COLUMN_LABELS, useColumnLayout } from "../lib/columns";
 import type {
   FilterState,
   NewsItem,
@@ -95,6 +99,22 @@ function getSortValue(row: RowData, key: SortKey): number {
   }
 }
 
+/**
+ * Ortak sıralama — hem masaüstü/mobil ana listede (`sortedRows`) hem de takip
+ * listesi sekmesinde (`watchedRows`, bkz. tasks/06-takip-listesi-ve-kolonlar.md §A)
+ * AYNI sıralama kuralı uygulansın diye tek yerde (görev metni Takibim'in "hangi
+ * sırayla" göstereceğini belirtmiyor; en tutarlı/en az sürpriz seçenek, uygulamanın
+ * geri kalanıyla aynı `sortKey`/`sortDir`'i kullanmak).
+ */
+function sortRows(rows: RowData[], sortKey: SortKey, sortDir: SortDir): RowData[] {
+  const copy = [...rows];
+  copy.sort((a, b) => {
+    if (sortKey === "symbol") return sortDir * a.symbol.localeCompare(b.symbol, "tr");
+    return sortDir * (getSortValue(a, sortKey) - getSortValue(b, sortKey));
+  });
+  return copy;
+}
+
 interface ScanScreenProps {
   initialTf: Timeframe;
   initialData: ScanResult;
@@ -128,10 +148,11 @@ export default function ScanScreen({ initialTf, initialData }: ScanScreenProps) 
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   // Mobil kartlarda ilk 50, kaydırınca/"daha fazla göster"e basınca +50 (tasks/04 §E).
   const [visibleCount, setVisibleCount] = useState(MOBILE_PAGE_SIZE);
-  // Mobil "Hisseler | Haberler" sekmesi (bkz. tasks/05-kap-haberler.md §D). "hisseler"
-  // ile başlar: ilk render'da haber kartları hiç mount edilmez, bu da mobil DOM düğümü
-  // bütçesini (kabul kriteri 7, <2000) haber listesinin boyutundan bağımsız kılar.
-  const [mobileTab, setMobileTab] = useState<"hisseler" | "haberler">("hisseler");
+  // Mobil "Hisseler | Haberler | Takibim" sekmesi (bkz. tasks/05-kap-haberler.md §D,
+  // tasks/06-takip-listesi-ve-kolonlar.md §A). "hisseler" ile başlar: ilk render'da
+  // haber/takip kartları hiç mount edilmez, bu da mobil DOM düğümü bütçesini (kabul
+  // kriteri 7, <2000) o listelerin boyutundan bağımsız kılar.
+  const [mobileTab, setMobileTab] = useState<"hisseler" | "haberler" | "takibim">("hisseler");
   // Piyasa geneli KAP haber akışı (bkz. tasks/05-kap-haberler.md §C/§D) — `tf`/filtreden
   // BAĞIMSIZ, tek seferlik fetch (ScanScreen'in tarama verisi fetch'iyle AYNI mimari:
   // konteyner fetch eder, NewsPanel/NewsList yalnızca gösterir). `null` = henüz
@@ -139,6 +160,26 @@ export default function ScanScreen({ initialTf, initialData }: ScanScreenProps) 
   // burada da sessizce boş diziye düşer, ayrı bir "hata" durumu YOK (haber yardımcı bir
   // özellik, ana tarama verisinin aksine kullanıcıyı teknik hatayla telaşlandırmaz).
   const [newsFeed, setNewsFeed] = useState<NewsItem[] | null>(null);
+
+  // Takip listesi (tasks/06-takip-listesi-ve-kolonlar.md §A) — localStorage/URL
+  // okuması hook İÇİNDE `isMobile` ile AYNI mount-sonrası desenle yapılır (bkz.
+  // lib/watchlist.ts), burada yalnızca sonucu kullanılır.
+  const { symbols: watchlistSymbols, isWatched, toggle: toggleWatch, pendingImport, resolvePendingImport } =
+    useWatchlist();
+  // Masaüstü "Takip listem" çipi (bkz. FilterPanel) — BİLEREK `FilterState`in parçası
+  // DEĞİL: "Filtreleri sıfırla" bunu sıfırlamamalı (skor/sektör/vb. gibi türetilmiş bir
+  // filtre değil, "hangi hisselerim var" sorusuna bakan ayrı bir eksen).
+  const [watchlistOnly, setWatchlistOnly] = useState(false);
+  // Takibim sekmesinin kendi "daha fazla göster" sayacı (tasks/04 §E ile aynı desen) —
+  // `visibleCount`tan (Hisseler sekmesi) BAĞIMSIZ, aksi hâlde iki sekme birbirinin
+  // sayfalama ilerlemesini bozardı.
+  const [watchlistVisibleCount, setWatchlistVisibleCount] = useState(MOBILE_PAGE_SIZE);
+
+  // Masaüstü kolon düzeni (tasks/06-takip-listesi-ve-kolonlar.md §B) — localStorage
+  // okuması hook İÇİNDE `isMobile`/takip listesiyle AYNI mount-sonrası desenle yapılır
+  // (bkz. lib/columns.ts). Mobilde bu değerler ScanTable'a hiç ulaşmaz (ScanTable
+  // yalnızca masaüstü dalında render edilir) — kabul kriteri 13 bu yüzden otomatik sağlanır.
+  const columnLayout = useColumnLayout();
 
   useEffect(() => {
     let cancelled = false;
@@ -271,18 +312,30 @@ export default function ScanScreen({ initialTf, initialData }: ScanScreenProps) 
       // masaüstü için her zaman no-op'tur (davranış birebir korunur).
       if (filters.chgDir === "UP" && !(row.chg > 0)) return false;
       if (filters.chgDir === "DOWN" && !(row.chg < 0)) return false;
+      // "Takip listem" çipi (tasks/06-takip-listesi-ve-kolonlar.md §A) — mobilde HİÇ
+      // ayarlanmaz (mobil bunun yerine ayrı bir "Takibim" sekmesi kullanır, aşağıdaki
+      // `watchedRows`), yani bu satır mobil "Hisseler" sekmesi için her zaman no-op'tur.
+      if (watchlistOnly && !isWatched(row.symbol)) return false;
       return true;
     });
-  }, [allRows, filters]);
+  }, [allRows, filters, watchlistOnly, isWatched]);
 
-  const sortedRows = useMemo(() => {
-    const copy = [...filteredRows];
-    copy.sort((a, b) => {
-      if (sortKey === "symbol") return sortDir * a.symbol.localeCompare(b.symbol, "tr");
-      return sortDir * (getSortValue(a, sortKey) - getSortValue(b, sortKey));
-    });
-    return copy;
-  }, [filteredRows, sortKey, sortDir]);
+  const sortedRows = useMemo(
+    () => sortRows(filteredRows, sortKey, sortDir),
+    [filteredRows, sortKey, sortDir],
+  );
+
+  // Mobil "Takibim" sekmesi (tasks/06-takip-listesi-ve-kolonlar.md §A) — BİLEREK
+  // `filteredRows`den değil `allRows`dan türetilir: sig/sektör/skor/ATR/fiyat/hacim/
+  // arama filtreleri burada UYGULANMAZ. Gerekçe: kullanıcı bir hisseyi yıldızladıysa
+  // onu HER ZAMAN görmeli — mevcut bir filtre (ör. "yalnızca SAT") yüzünden kendi
+  // takip listesinin "boş" görünmesi güvenilirlik vaadini (dış görev metni "WHO THIS
+  // IS FOR") bozar. Sıralama (`sortKey`/`sortDir`) yine de uygulanır — bu bir "filtre"
+  // değil, uygulamanın geri kalanıyla tutarlı bir görüntüleme sırası.
+  const watchedRows = useMemo(
+    () => sortRows(allRows.filter((r) => isWatched(r.symbol)), sortKey, sortDir),
+    [allRows, isWatched, sortKey, sortDir],
+  );
 
   const upCount = useMemo(() => allRows.filter((r) => r.chg > 0).length, [allRows]);
   const downCount = useMemo(() => allRows.filter((r) => r.chg < 0).length, [allRows]);
@@ -292,6 +345,12 @@ export default function ScanScreen({ initialTf, initialData }: ScanScreenProps) 
   useEffect(() => {
     setVisibleCount(MOBILE_PAGE_SIZE);
   }, [tf, filters, sortKey, sortDir]);
+
+  // Takibim sekmesi için AYNI sayfalama sıfırlaması — `filters`e bağımlı DEĞİL
+  // (watchedRows filtrelerden etkilenmiyor, bkz. yukarıdaki yorum), yalnızca tf/sıralama.
+  useEffect(() => {
+    setWatchlistVisibleCount(MOBILE_PAGE_SIZE);
+  }, [tf, sortKey, sortDir]);
 
   // "Filtrele" düğmesindeki sayı rozeti (tasks/04 §D) — yalnızca FilterSheet'in
   // gerçekten denetlediği alanlar sayılır; `q` (arama) TopBar'da ayrı bir kontrol,
@@ -404,6 +463,13 @@ export default function ScanScreen({ initialTf, initialData }: ScanScreenProps) 
               >
                 Haberler
               </button>
+              <button
+                type="button"
+                className={`seg-btn${mobileTab === "takibim" ? " active" : ""}`}
+                onClick={() => setMobileTab("takibim")}
+              >
+                Takibim
+              </button>
             </div>
           </div>
           {mobileTab === "haberler" ? (
@@ -412,6 +478,16 @@ export default function ScanScreen({ initialTf, initialData }: ScanScreenProps) 
               onSelectSymbol={setSelectedSymbol}
               emptyText="Son 7 günde KAP bildirimi yok."
               variant="mobile"
+            />
+          ) : mobileTab === "takibim" ? (
+            <WatchlistTab
+              rows={watchedRows}
+              visibleCount={watchlistVisibleCount}
+              onLoadMore={() => setWatchlistVisibleCount((c) => Math.min(c + MOBILE_PAGE_SIZE, watchedRows.length))}
+              onSelectSymbol={setSelectedSymbol}
+              isWatched={isWatched}
+              onToggleWatch={toggleWatch}
+              symbols={watchlistSymbols}
             />
           ) : (
             <>
@@ -453,6 +529,8 @@ export default function ScanScreen({ initialTf, initialData }: ScanScreenProps) 
                   visibleCount={visibleCount}
                   onLoadMore={() => setVisibleCount((c) => Math.min(c + MOBILE_PAGE_SIZE, sortedRows.length))}
                   onSelectSymbol={setSelectedSymbol}
+                  isWatched={isWatched}
+                  onToggleWatch={toggleWatch}
                 />
               )}
             </>
@@ -467,6 +545,9 @@ export default function ScanScreen({ initialTf, initialData }: ScanScreenProps) 
             sectorOptions={sectorOptions}
             matchCount={sortedRows.length}
             totalCount={allRows.length}
+            watchlistSymbols={watchlistSymbols}
+            watchlistOnly={watchlistOnly}
+            onToggleWatchlistOnly={() => setWatchlistOnly((v) => !v)}
           />
           <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
             <div style={{ display: "flex", alignItems: "baseline", gap: 8, padding: "10px 16px 8px", flex: "none" }}>
@@ -478,6 +559,18 @@ export default function ScanScreen({ initialTf, initialData }: ScanScreenProps) 
                 {isLoading ? " · yükleniyor…" : ""}
                 {fetchError ? ` · hata: ${fetchError}` : ""}
               </span>
+              {/* Kolon düzeni (tasks/06-takip-listesi-ve-kolonlar.md §B) — yalnızca
+                  masaüstü, tablonun başlık çubuğunda ("başlık çubuğunda bir 'Kolonlar'
+                  düğmesi", görev metni). `marginLeft:auto` bu tek öğeyi bar'ın SAĞ ucuna
+                  iter, "Tarama sonuçları"/sıralama etiketinin mevcut düzenine dokunmadan. */}
+              <div style={{ marginLeft: "auto" }}>
+                <ColumnMenu
+                  columns={columnLayout.order.map((id) => ({ id, label: COLUMN_LABELS[id] }))}
+                  hidden={columnLayout.hidden}
+                  onToggle={columnLayout.toggleHidden}
+                  onReset={columnLayout.reset}
+                />
+              </div>
             </div>
             <div style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
               <ScanTable
@@ -488,8 +581,25 @@ export default function ScanScreen({ initialTf, initialData }: ScanScreenProps) 
                 onResetFilters={handleReset}
                 onSelectSymbol={setSelectedSymbol}
                 selectedSymbol={selectedSymbol}
+                isWatched={isWatched}
+                onToggleWatch={toggleWatch}
+                columnOrder={columnLayout.order}
+                hiddenColumns={columnLayout.hidden}
+                onReorderColumns={columnLayout.reorder}
               />
-              {sortedRows.length === 0 && !isLoading ? <EmptyState onReset={handleReset} /> : null}
+              {sortedRows.length === 0 && !isLoading ? (
+                // Boşluğun NEDENİ "Takip listem" çipi açıkken hiç yıldızlı hisse
+                // olmaması ise (görev "Kapsam" §Boş durum) genel "Filtrelerle eşleşen
+                // hisse yok" mesajı YANLIŞ olurdu — o zaman aynı açıklayıcı metin
+                // (WatchlistEmptyState, Takibim sekmesiyle PAYLAŞILAN) gösterilir.
+                // Başka bir filtre YÜZÜNDEN boşsa (watchlistSymbols.length > 0 ama
+                // hiçbiri eşleşmiyorsa) genel mesaj/"Filtreleri sıfırla" doğru kalır.
+                watchlistOnly && watchlistSymbols.length === 0 ? (
+                  <WatchlistEmptyState />
+                ) : (
+                  <EmptyState onReset={handleReset} />
+                )
+              ) : null}
             </div>
           </div>
           <NewsPanel items={newsFeed} onSelectSymbol={setSelectedSymbol} />
@@ -509,6 +619,18 @@ export default function ScanScreen({ initialTf, initialData }: ScanScreenProps) 
       {selectedSymbol ? (
         <DetailDrawer symbol={selectedSymbol} tf={tf} onClose={() => setSelectedSymbol(null)} />
       ) : null}
+      {/* URL'de `?takip=` var VE localStorage doluyken sorulan üç seçenek (tasks/06-
+          takip-listesi-ve-kolonlar.md §A "Mimari kısıt") — isMobile dalından BAĞIMSIZ
+          render edilir (DetailDrawer/FilterSheet ile aynı desen), çünkü bağlantı hangi
+          cihazda açılırsa açılsın (çoğunlukla mobil, bkz. dış görev metni) çalışmalı. */}
+      {pendingImport ? (
+        <WatchlistImportPrompt
+          count={pendingImport.symbols.length}
+          onMerge={() => resolvePendingImport("merge")}
+          onReplace={() => resolvePendingImport("replace")}
+          onIgnore={() => resolvePendingImport("ignore")}
+        />
+      ) : null}
     </div>
   );
 }
@@ -527,6 +649,91 @@ function DelayStrip() {
       <span style={{ fontSize: 14, lineHeight: 1.45, color: "var(--color-neutral-200)" }}>
         Veriler ~15 dakika gecikmelidir. Emir vermeden önce aracı kurumunuzdaki canlı fiyata bakın.
       </span>
+    </div>
+  );
+}
+
+/**
+ * URL'den gelen takip listesi + localStorage'da ZATEN bir liste varken sorulan üç
+ * seçenek (bkz. tasks/06-takip-listesi-ve-kolonlar.md §A "Mimari kısıt"): görev
+ * metninde birebir "Bağlantıdaki N hisse eklensin mi? [Listeme ekle] [Listemi
+ * değiştir] [Yoksay]". `.drawer-overlay` (mevcut fade-in animasyonu) yeniden
+ * kullanılır; öne çıkan "Listeme ekle" seçeneği accent TONU ile vurgulanır (geniş
+ * dolgu DEĞİL — `.chip.active`/`.seg-btn.active` ile aynı color-mix tarifi, görev
+ * "Sert kısıtlar").
+ */
+function WatchlistImportPrompt({
+  count,
+  onMerge,
+  onReplace,
+  onIgnore,
+}: {
+  count: number;
+  onMerge: () => void;
+  onReplace: () => void;
+  onIgnore: () => void;
+}) {
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") onIgnore();
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 50 }}>
+      <div
+        className="drawer-overlay"
+        style={{ position: "fixed", inset: 0, background: "rgba(9, 10, 18, 0.6)" }}
+        onClick={onIgnore}
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Takip listesi bağlantısı"
+        style={{
+          position: "fixed",
+          top: "50%",
+          left: "50%",
+          transform: "translate(-50%, -50%)",
+          zIndex: 51,
+          width: "min(360px, 90vw)",
+          background: "linear-gradient(180deg, var(--color-neutral-900), var(--color-bg) 160px)",
+          border: "1px solid var(--color-neutral-700)",
+          borderRadius: "var(--radius-lg)",
+          boxShadow: "var(--shadow-lg)",
+          padding: 20,
+          display: "flex",
+          flexDirection: "column",
+          gap: 14,
+        }}
+      >
+        <div style={{ fontSize: 14.5, lineHeight: 1.5, color: "var(--color-text)" }}>
+          Bağlantıdaki {count} hisse eklensin mi?
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <button
+            type="button"
+            className="btn btn-secondary btn-lg"
+            style={{
+              borderColor: "var(--color-accent)",
+              color: "var(--color-accent-100)",
+              background: "color-mix(in oklab, var(--color-accent) 16%, transparent)",
+            }}
+            onClick={onMerge}
+          >
+            Listeme ekle
+          </button>
+          <button type="button" className="btn btn-secondary btn-lg" onClick={onReplace}>
+            Listemi değiştir
+          </button>
+          <button type="button" className="btn btn-ghost btn-lg" onClick={onIgnore}>
+            Yoksay
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

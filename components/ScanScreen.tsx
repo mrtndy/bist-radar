@@ -1,14 +1,26 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { Clock, FunnelSimple } from "@phosphor-icons/react";
 import TopBar from "./TopBar";
 import FilterPanel from "./FilterPanel";
 import ScanTable, { EmptyState } from "./ScanTable";
+import MobileList from "./MobileList";
+import FilterSheet from "./FilterSheet";
+import SortMenu from "./SortMenu";
 import DetailDrawer from "./DetailDrawer";
 import { formatLastUpdated, parseLenient } from "../lib/format";
 import type { FilterState, RefreshState, RowData, ScanApiResponse, ScanResult, SortDir, SortKey, Timeframe } from "../lib/types";
 
 const TF_LABEL: Record<Timeframe, string> = { G: "Günlük", H: "Haftalık", S: "Saatlik" };
+
+/** Kırılma noktası (bkz. tasks/04-mobil-gorunum.md §A): altı mobil kart listesi,
+ * üstü/eşiti mevcut masaüstü tablo düzeni — masaüstü BİREBİR aynı kalır. */
+const MOBILE_BREAKPOINT = 720;
+
+/** Mobil kartların bir kerede kaç tanesi render edilir / kaydırınca kaç tane daha
+ * eklenir (bkz. tasks/04-mobil-gorunum.md §E — performans ZORUNLU). */
+const MOBILE_PAGE_SIZE = 50;
 
 // GitHub Pages gibi alt dizinde servis eden statik host'lar için (next.config.ts'teki
 // basePath ile aynı değer) — derleme zamanında istemci paketine gömülür, yerel
@@ -39,6 +51,7 @@ const DEFAULT_FILTERS: FilterState = {
   pMax: "",
   minVolM: "",
   q: "",
+  chgDir: "ALL",
 };
 
 function getSortValue(row: RowData, key: SortKey): number {
@@ -87,6 +100,27 @@ export default function ScanScreen({ initialTf, initialData }: ScanScreenProps) 
   // anda o dilimin verisine geçer (README "Interactions & Behavior").
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
   const [refreshState, setRefreshState] = useState<RefreshState>("idle");
+
+  // Mobil kırılma noktası (tasks/04-mobil-gorunum.md §A). `false` başlar (sunucuda
+  // `window` yok) — bu, ilk render'ın masaüstü dalını üretmesini sağlar ki client
+  // hidration'ı sunucuyla birebir eşleşsin (aksi hâlde React hidration uyuşmazlığı
+  // -> konsol hatası verir, kabul kriteri 12'yi bozar). Gerçek genişlik mount
+  // olduktan HEMEN sonra, aşağıdaki efektte ölçülür ve pencere yeniden boyutlanınca
+  // güncellenir (Claude_Browser `resize_window` doğrulaması sayfayı yeniden
+  // yüklemeden aynı sekmede boyut değiştirebiliyor).
+  const [isMobile, setIsMobile] = useState(false);
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
+  // Mobil kartlarda ilk 50, kaydırınca/"daha fazla göster"e basınca +50 (tasks/04 §E).
+  const [visibleCount, setVisibleCount] = useState(MOBILE_PAGE_SIZE);
+
+  useEffect(() => {
+    function check() {
+      setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
+    }
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
 
   /**
    * Yayınlanmış veriyi yeniden çeker.
@@ -181,12 +215,25 @@ export default function ScanScreen({ initialTf, initialData }: ScanScreenProps) 
       if (filters.sig !== "ALL" && row.signal !== wantSignal) return false;
       if (filters.sector !== "Tümü" && row.sector !== filters.sector) return false;
       if (row.score < filters.minScore) return false;
-      if (row.relVol < filters.minRelVol) return false;
+      // `filters.minRelVol > 0` koruması bilerek var: bazı semboller dejenere veri
+      // taşır (relVol = NaN, bkz. lib/format.ts yorumu, "0/0" durumu) — eski hâliyle
+      // `row.relVol < filters.minRelVol` NaN için HER ZAMAN false döner (NaN hiçbir
+      // sayıdan küçük değildir), yani NaN satırlar YANLIŞLIKLA her pozitif eşiği
+      // geçerdi (mobil "Yüksek hacimli" hazır seti bunu yakaladı: relVol>=1,5 ölçüde
+      // 79 beklenirken 82 çıkıyordu — 3 fazlası tam da bu NaN satırlardı). Varsayılan
+      // (minRelVol=0, filtre yok) durumda bu satır ESKİSİYLE BİREBİR AYNI davranır —
+      // yalnızca GERÇEKTEN bir eşik uygulanınca NaN satırlar (doğru biçimde) elenir.
+      if (filters.minRelVol > 0 && !(row.relVol >= filters.minRelVol)) return false;
       if (aMin != null && row.atrPct < aMin) return false;
       if (aMax != null && row.atrPct > aMax) return false;
       if (pMin != null && row.price < pMin) return false;
       if (pMax != null && row.price > pMax) return false;
       if (vMin != null && row.volTL / 1e6 < vMin) return false;
+      // Mobil "Yükselenler"/"Düşenler" hazır setleri (tasks/04-mobil-gorunum.md §D).
+      // `chgDir` masaüstü FilterPanel'de hiç ayarlanmaz — "ALL" kalır, yani bu satır
+      // masaüstü için her zaman no-op'tur (davranış birebir korunur).
+      if (filters.chgDir === "UP" && !(row.chg > 0)) return false;
+      if (filters.chgDir === "DOWN" && !(row.chg < 0)) return false;
       return true;
     });
   }, [allRows, filters]);
@@ -203,6 +250,30 @@ export default function ScanScreen({ initialTf, initialData }: ScanScreenProps) 
   const upCount = useMemo(() => allRows.filter((r) => r.chg > 0).length, [allRows]);
   const downCount = useMemo(() => allRows.filter((r) => r.chg < 0).length, [allRows]);
 
+  // Mobil kart listesi her yeni tf/filtre/sıralamada 50'den başlar (tasks/04 §E) —
+  // önceki (farklı) sonuç kümesinden kalma büyük bir visibleCount ile başlamasın.
+  useEffect(() => {
+    setVisibleCount(MOBILE_PAGE_SIZE);
+  }, [tf, filters, sortKey, sortDir]);
+
+  // "Filtrele" düğmesindeki sayı rozeti (tasks/04 §D) — yalnızca FilterSheet'in
+  // gerçekten denetlediği alanlar sayılır; `q` (arama) TopBar'da ayrı bir kontrol,
+  // filtre sayfasının parçası değil.
+  const activeFilterCount = useMemo(() => {
+    let n = 0;
+    if (filters.sig !== DEFAULT_FILTERS.sig) n++;
+    if (filters.sector !== DEFAULT_FILTERS.sector) n++;
+    if (filters.minScore !== DEFAULT_FILTERS.minScore) n++;
+    if (filters.minRelVol !== DEFAULT_FILTERS.minRelVol) n++;
+    if (filters.atrMin !== DEFAULT_FILTERS.atrMin) n++;
+    if (filters.atrMax !== DEFAULT_FILTERS.atrMax) n++;
+    if (filters.pMin !== DEFAULT_FILTERS.pMin) n++;
+    if (filters.pMax !== DEFAULT_FILTERS.pMax) n++;
+    if (filters.minVolM !== DEFAULT_FILTERS.minVolM) n++;
+    if (filters.chgDir !== DEFAULT_FILTERS.chgDir) n++;
+    return n;
+  }, [filters]);
+
   function handleSort(key: SortKey) {
     if (key === sortKey) {
       setSortDir((d) => (d * -1) as SortDir);
@@ -210,6 +281,18 @@ export default function ScanScreen({ initialTf, initialData }: ScanScreenProps) 
       setSortKey(key);
       setSortDir(key === "symbol" ? 1 : -1);
     }
+  }
+
+  /**
+   * Mobil sıralama menüsünden seçim (bkz. components/SortMenu.tsx). `handleSort`'un
+   * "aynı kolona tekrar basınca yönü çevir" davranışını BİLEREK yeniden kullanmaz:
+   * menüdeki her seçenek kendi etiketinde yazan yönü (ör. "yüksek→düşük") her
+   * seferinde deterministik uygular — masaüstü `handleSort`/ScanTable başlık tıklaması
+   * bu fonksiyondan ETKİLENMEZ, ayrı kalır.
+   */
+  function handleSortMenuSelect(key: SortKey) {
+    setSortKey(key);
+    setSortDir(key === "symbol" ? 1 : -1);
   }
 
   function handleFilterChange(patch: Partial<FilterState>) {
@@ -220,6 +303,17 @@ export default function ScanScreen({ initialTf, initialData }: ScanScreenProps) 
     setFilters(DEFAULT_FILTERS);
   }
 
+  /**
+   * Mobil hazır filtre seti (bkz. components/FilterSheet.tsx §D) — diğer TÜM
+   * filtreleri varsayılana döndürüp yalnızca `patch`'i uygular ("tek dokunuşla"
+   * öngörülebilir sonuç; teyzenin karşısına birikmiş gizli filtreler çıkmasın) ve
+   * alt sayfayı kapatır.
+   */
+  function handleApplyPreset(patch: Partial<FilterState>) {
+    setFilters({ ...DEFAULT_FILTERS, ...patch });
+    setFilterSheetOpen(false);
+  }
+
   const sortLabel = `${SORT_NAMES[sortKey]}${sortDir < 0 ? " (azalan)" : " (artan)"}`;
   const lastUpdatedLabel = current?.fetchedAt != null ? formatLastUpdated(current.fetchedAt) : null;
   const isLoading = loadingTf === tf && !current;
@@ -228,7 +322,7 @@ export default function ScanScreen({ initialTf, initialData }: ScanScreenProps) 
     <div
       style={{
         display: "grid",
-        gridTemplateRows: "54px 1fr",
+        gridTemplateRows: isMobile ? "auto 1fr" : "54px 1fr",
         gridTemplateColumns: "minmax(0, 1fr)",
         height: "100vh",
         overflow: "hidden",
@@ -248,44 +342,120 @@ export default function ScanScreen({ initialTf, initialData }: ScanScreenProps) 
         lastUpdatedLabel={lastUpdatedLabel}
         onRefresh={() => void refresh()}
         refreshState={refreshState}
+        isMobile={isMobile}
       />
-      <div style={{ display: "flex", minHeight: 0 }}>
-        <FilterPanel
+      {isMobile ? (
+        <div style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
+          <DelayStrip />
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 8,
+              padding: "10px 14px 0",
+              flex: "none",
+            }}
+          >
+            <button
+              type="button"
+              className="btn btn-secondary btn-lg"
+              onClick={() => setFilterSheetOpen(true)}
+              style={{ position: "relative", gap: 8 }}
+            >
+              <FunnelSimple size={16} />
+              Filtrele
+              {activeFilterCount > 0 ? <span className="filter-badge">{activeFilterCount}</span> : null}
+            </button>
+            <SortMenu sortKey={sortKey} onSelect={handleSortMenuSelect} />
+          </div>
+          <div style={{ padding: "8px 14px 0", flex: "none", fontSize: 12.5, color: "var(--color-neutral-400)" }}>
+            <strong style={{ color: "var(--color-text)", fontVariantNumeric: "tabular-nums" }}>
+              {sortedRows.length}
+            </strong>{" "}
+            / {allRows.length} hisse eşleşti
+            {isLoading ? " · yükleniyor…" : ""}
+            {fetchError ? ` · hata: ${fetchError}` : ""}
+          </div>
+          {sortedRows.length === 0 && !isLoading ? (
+            <EmptyState onReset={handleReset} />
+          ) : (
+            <MobileList
+              rows={sortedRows}
+              visibleCount={visibleCount}
+              onLoadMore={() => setVisibleCount((c) => Math.min(c + MOBILE_PAGE_SIZE, sortedRows.length))}
+              onSelectSymbol={setSelectedSymbol}
+            />
+          )}
+        </div>
+      ) : (
+        <div style={{ display: "flex", minHeight: 0 }}>
+          <FilterPanel
+            filters={filters}
+            onChange={handleFilterChange}
+            onReset={handleReset}
+            sectorOptions={sectorOptions}
+            matchCount={sortedRows.length}
+            totalCount={allRows.length}
+          />
+          <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 8, padding: "10px 16px 8px", flex: "none" }}>
+              <span style={{ fontFamily: "var(--font-heading)", fontSize: 13.5, fontWeight: 500 }}>
+                Tarama sonuçları
+              </span>
+              <span style={{ fontSize: 11.5, color: "var(--color-neutral-400)" }}>
+                {TF_LABEL[tf]} · sıralama: {sortLabel}
+                {isLoading ? " · yükleniyor…" : ""}
+                {fetchError ? ` · hata: ${fetchError}` : ""}
+              </span>
+            </div>
+            <div style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
+              <ScanTable
+                rows={sortedRows}
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onSort={handleSort}
+                onResetFilters={handleReset}
+                onSelectSymbol={setSelectedSymbol}
+                selectedSymbol={selectedSymbol}
+              />
+              {sortedRows.length === 0 && !isLoading ? <EmptyState onReset={handleReset} /> : null}
+            </div>
+          </div>
+        </div>
+      )}
+      {filterSheetOpen ? (
+        <FilterSheet
+          onClose={() => setFilterSheetOpen(false)}
           filters={filters}
           onChange={handleFilterChange}
-          onReset={handleReset}
+          onApplyPreset={handleApplyPreset}
           sectorOptions={sectorOptions}
           matchCount={sortedRows.length}
           totalCount={allRows.length}
         />
-        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 8, padding: "10px 16px 8px", flex: "none" }}>
-            <span style={{ fontFamily: "var(--font-heading)", fontSize: 13.5, fontWeight: 500 }}>
-              Tarama sonuçları
-            </span>
-            <span style={{ fontSize: 11.5, color: "var(--color-neutral-400)" }}>
-              {TF_LABEL[tf]} · sıralama: {sortLabel}
-              {isLoading ? " · yükleniyor…" : ""}
-              {fetchError ? ` · hata: ${fetchError}` : ""}
-            </span>
-          </div>
-          <div style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
-            <ScanTable
-              rows={sortedRows}
-              sortKey={sortKey}
-              sortDir={sortDir}
-              onSort={handleSort}
-              onResetFilters={handleReset}
-              onSelectSymbol={setSelectedSymbol}
-              selectedSymbol={selectedSymbol}
-            />
-            {sortedRows.length === 0 && !isLoading ? <EmptyState onReset={handleReset} /> : null}
-          </div>
-        </div>
-      </div>
+      ) : null}
       {selectedSymbol ? (
         <DetailDrawer symbol={selectedSymbol} tf={tf} onClose={() => setSelectedSymbol(null)} />
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * Gecikme uyarısı şeridi (mobil) — bkz. tasks/04-mobil-gorunum.md §G. Sürekli
+ * görünür, KAPATILAMAZ (dismiss düğmesi yok, localStorage'da "görüldü" durumu
+ * tutulmaz) — brief'in kendi ifadesiyle birebir aynı metin; DetailDrawer'daki
+ * `DelayNotice` ile aynı "~15 dakika" gecikme gerçeğini anlatır (bkz. o dosyadaki
+ * yorum), aynı ikon/vurgu düzenini kullanır.
+ */
+function DelayStrip() {
+  return (
+    <div className="delay-strip">
+      <Clock size={16} weight="bold" style={{ flex: "none", marginTop: 1, color: "var(--color-accent-200)" }} />
+      <span style={{ fontSize: 14, lineHeight: 1.45, color: "var(--color-neutral-200)" }}>
+        Veriler ~15 dakika gecikmelidir. Emir vermeden önce aracı kurumunuzdaki canlı fiyata bakın.
+      </span>
     </div>
   );
 }

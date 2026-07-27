@@ -31,6 +31,13 @@ export interface RowData {
   histPct: number;
   /** TL cinsinden bar hacmi (fiyat * lot). */
   volTL: number;
+  /**
+   * En güçlü (|p| en büyük) skor bileşeninin motor gerekçesi — mobil kart listesinde
+   * gösterilir (bkz. tasks/04-mobil-gorunum.md §B "Kimin kullanacağı"). Ayrı bir metin
+   * DEĞİLDİR: `scoreOf()` çıktısındaki `breakdown[].n` alanından türetilir
+   * (bkz. `lib/scan-data.ts`).
+   */
+  topReason: string;
 }
 
 export interface ScanResult {
@@ -97,6 +104,13 @@ export interface FilterState {
   pMax: string;
   minVolM: string;
   q: string;
+  /**
+   * Mobil "Yükselenler" / "Düşenler" hazır filtre setleri için (bkz.
+   * tasks/04-mobil-gorunum.md §D). Masaüstü `FilterPanel` bu alanı hiç göstermez ya
+   * da değiştirmez — varsayılan "ALL" kalır, yani bu alan eklenmeden önceki masaüstü
+   * filtreleme davranışı birebir korunur.
+   */
+  chgDir: "ALL" | "UP" | "DOWN";
 }
 
 export type SortKey =

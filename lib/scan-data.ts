@@ -13,7 +13,7 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { indicators, MIN_BARS } from "../src/engine/indicators.ts";
 import { scoreOf, signalOf } from "../src/engine/scoring.ts";
-import type { Bar, Timeframe, UniverseEntry } from "../src/engine/types.ts";
+import type { Bar, ScoreComponent, Timeframe, UniverseEntry } from "../src/engine/types.ts";
 import type { RowData, ScanResult } from "./types";
 
 const ROOT = process.cwd();
@@ -46,6 +46,21 @@ function getSectorList(): Promise<string[]> {
     });
   }
   return sectorsPromise;
+}
+
+/**
+ * Mobil kart listesindeki tek satırlık gerekçe (bkz. tasks/04-mobil-gorunum.md §B,
+ * `RowData.topReason`) — en güçlü (|p| en büyük) skor bileşeninin motor metni.
+ * Skor burada YENİDEN HESAPLANMAZ; `scoreOf()`'un zaten ürettiği `breakdown`
+ * dizisinden en etkili bileşen seçilir (eşitlikte dizideki ilk bileşen kazanır).
+ */
+function topReasonOf(breakdown: ScoreComponent[]): string {
+  if (breakdown.length === 0) return "";
+  let top = breakdown[0];
+  for (const c of breakdown) {
+    if (Math.abs(c.p) > Math.abs(top.p)) top = c;
+  }
+  return top.n;
 }
 
 /** Bar dizinindeki her dosyanın mtime'ını okuyup tekil bir imza üretir — içerik değişmediyse önbellek geçerli kalır. */
@@ -87,7 +102,7 @@ async function computeRows(tf: Timeframe, barDir: string, files: string[]): Prom
 
     try {
       const ind = indicators(bars, tf);
-      const { score } = scoreOf(ind, tf);
+      const { score, breakdown } = scoreOf(ind, tf);
       if (!Number.isFinite(ind.price) || !Number.isFinite(score)) continue;
       const u = meta.get(symbol);
       const signal = signalOf(score);
@@ -108,6 +123,7 @@ async function computeRows(tf: Timeframe, barDir: string, files: string[]): Prom
         hist: ind.hist,
         histPct: (ind.hist / ind.price) * 100,
         volTL: ind.volTL,
+        topReason: topReasonOf(breakdown),
       });
     } catch {
       // Motor hatası (ör. dejenere seri) — bu sembolü atla, taramanın kalanını etkilemesin.

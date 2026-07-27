@@ -24,10 +24,16 @@ from pathlib import Path
 import yfinance as yf
 
 # (yfinance interval, period) — MIN_BARS=120 ısınma payını rahatça karşılar.
+#
+# Saatlikte "2y" değil "6mo": ölçüldü (2026-07-27, 119 hisse), 3962 bardan 450 bara
+# inince göstergelerdeki en büyük göreli fark %0,0000 ve tek bir skor bile değişmiyor —
+# EMA(26) o noktada çoktan yakınsamış oluyor. "6mo" ~880 bar verir, yani hâlâ bol paylı.
+# Kazanç büyük: bar indirme iş akışı süresinin %83'ünü yiyordu ve saatlik onun en ağır
+# parçasıydı. Bu kısaltma gün içi tazelemeyi mümkün kılıyor.
 TIMEFRAMES = {
     "G": ("1d", "2y"),
     "H": ("1wk", "10y"),
-    "S": ("1h", "2y"),
+    "S": ("1h", "6mo"),
 }
 
 BATCH_SIZE = 60

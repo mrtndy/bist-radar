@@ -8,15 +8,10 @@
  *
  * Çalıştır:  node scripts/parity.ts
  */
-import { readFile } from "node:fs/promises";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { indicators } from "../src/engine/indicators.ts";
 import { scoreOf } from "../src/engine/scoring.ts";
 import type { Bar, Timeframe } from "../src/engine/types.ts";
-
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-const ORIGINAL = path.resolve(HERE, "../../design_handoff_bist_radar/bist-data.js");
+import { importPrototype } from "./prototype-source.ts";
 
 /**
  * Kasıtlı farklar:
@@ -28,17 +23,15 @@ const isIgnored = (p: string) => IGNORED.some((re) => re.test(p));
 
 type AnyRec = Record<string, unknown>;
 
-async function loadOriginal() {
-  const src = await readFile(ORIGINAL, "utf8");
-  const patched = `${src}\nexport { indicators as _indicators, scoreOf as _scoreOf, genSeries as _genSeries, hash as _hash };\n`;
-  const url = `data:text/javascript;base64,${Buffer.from(patched, "utf8").toString("base64")}`;
-  return (await import(url)) as {
+const loadOriginal = () =>
+  importPrototype<{
     _indicators: (bars: unknown[], tf: string) => AnyRec;
     _scoreOf: (d: AnyRec) => AnyRec;
     _genSeries: (sym: string, tf: string, tier: number, arch: number) => AnyRec[];
     _hash: (s: string) => number;
-  };
-}
+  }>(
+    "export { indicators as _indicators, scoreOf as _scoreOf, genSeries as _genSeries, hash as _hash };",
+  );
 
 const diffs: string[] = [];
 interface Comp { k: string; p: number; n: string }

@@ -52,10 +52,12 @@ jobs:
         continue-on-error: true
         run: node scripts/build-universe.ts
 
-      - name: KAP erişilemediyse depodaki evreni kullan
+      - name: Evren tazelenemediyse depodakini kullan
         if: steps.universe.outcome == 'failure'
         run: |
-          echo "::warning::KAP'tan evren çekilemedi (bulut IP'si engellenmiş olabilir); depodaki data/universe.json kullanılıyor."
+          # Sebebi VARSAYMA — bir önceki adımın günlüğüne bak. Görülen sebepler: KAP'ın bulut
+          # IP'lerini engellemesi, KAP uçlarının değişmesi, ya da script hatası.
+          echo "::warning::Evren tazelenemedi (sebep için 'Hisse evrenini tazele' adımının günlüğüne bak); depodaki data/universe.json kullanılıyor. Sektör bilgisi eskimiş olabilir."
           test -s data/universe.json || { echo "::error::Yedek evren dosyası da yok — durduruldu."; exit 1; }
 
       - name: Barları çek (Yahoo Finance)

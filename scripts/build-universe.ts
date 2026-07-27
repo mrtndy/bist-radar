@@ -9,22 +9,21 @@
  *
  * Çalıştır:  node scripts/build-universe.ts
  */
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { getUniverse } from "../src/providers/kap.ts";
 import type { UniverseEntry } from "../src/engine/types.ts";
+import { importPrototype } from "./prototype-source.ts";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..");
-const PROTOTYPE = path.resolve(ROOT, "../design_handoff_bist_radar/bist-data.js");
 
 /** Prototipteki `TICKERS` dizisinden [sembol, ad, sektör] tohumu okur. */
 async function sectorSeed(): Promise<Map<string, { name: string; sector: string }>> {
-  const src = await readFile(PROTOTYPE, "utf8");
-  const patched = `${src}\nexport { TICKERS as _TICKERS };\n`;
-  const url = `data:text/javascript;base64,${Buffer.from(patched, "utf8").toString("base64")}`;
-  const mod = (await import(url)) as { _TICKERS: [string, string, string, number][] };
+  const mod = await importPrototype<{ _TICKERS: [string, string, string, number][] }>(
+    "export { TICKERS as _TICKERS };",
+  );
   return new Map(mod._TICKERS.map(([sym, name, sector]) => [sym, { name, sector }]));
 }
 

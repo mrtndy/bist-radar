@@ -251,3 +251,89 @@ button {
 .scan-table tbody tr:hover {
   background: color-mix(in oklab, var(--color-accent) 7%, transparent);
 }
+
+/* — hisse detay paneli (drawer) — bkz. tasks/03-detail-drawer.md, components/DetailDrawer.tsx */
+@keyframes drawerFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes drawerSlideIn {
+  from {
+    transform: translateX(28px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+.drawer-overlay {
+  animation: drawerFadeIn 0.2s ease;
+}
+
+.drawer-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(680px, 95vw);
+  background: linear-gradient(180deg, var(--color-neutral-900), var(--color-bg) 340px);
+  border-left: 1px solid var(--color-neutral-700);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  animation: drawerSlideIn 0.26s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+/* Görev "Mobil" §D: dar ekranda sağdan kayan panel değil, tam ekran. */
+@media (max-width: 640px) {
+  .drawer-panel {
+    width: 100vw;
+  }
+}
+
+.drawer-header {
+  flex: none;
+  padding: 18px 22px 14px;
+  border-bottom: 1px solid transparent;
+  border-image: linear-gradient(90deg, var(--color-neutral-700), transparent) 1;
+}
+
+.drawer-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 14px 22px 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.tag-neutral {
+  background: var(--color-neutral-800);
+  color: var(--color-neutral-300);
+}
+
+/* Simge butonu (drawer kapatma vb.) — görev "Mobil" §D: parmakla rahat basılacak
+   min 44x44px hedef. */
+.btn-icon {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  flex: none;
+  border-radius: var(--radius-md);
+  color: var(--color-neutral-300);
+}
+.btn-icon:hover {
+  background: color-mix(in srgb, var(--color-text) 8%, transparent);
+  color: var(--color-text);
+}
+.btn-icon:active {
+  background: color-mix(in srgb, var(--color-text) 14%, transparent);
+}

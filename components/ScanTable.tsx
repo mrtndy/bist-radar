@@ -49,9 +49,21 @@ interface ScanTableProps {
   sortDir: SortDir;
   onSort: (key: SortKey) => void;
   onResetFilters: () => void;
+  /** Bir satıra tıklanınca hisse detay panelini açar (bkz. components/DetailDrawer.tsx). */
+  onSelectSymbol: (symbol: string) => void;
+  /** Panelde açık olan sembol — satır vurgusu için (prototipteki `rowStyle` ile aynı). */
+  selectedSymbol?: string | null;
 }
 
-export default function ScanTable({ rows, sortKey, sortDir, onSort, onResetFilters }: ScanTableProps) {
+export default function ScanTable({
+  rows,
+  sortKey,
+  sortDir,
+  onSort,
+  onResetFilters,
+  onSelectSymbol,
+  selectedSymbol,
+}: ScanTableProps) {
   return (
     <table className="scan-table">
       <thead>
@@ -72,7 +84,15 @@ export default function ScanTable({ rows, sortKey, sortDir, onSort, onResetFilte
       </thead>
       <tbody>
         {rows.map((r) => (
-          <tr key={r.symbol}>
+          <tr
+            key={r.symbol}
+            onClick={() => onSelectSymbol(r.symbol)}
+            style={{
+              cursor: "pointer",
+              background:
+                selectedSymbol === r.symbol ? "color-mix(in oklab, var(--color-accent) 10%, transparent)" : undefined,
+            }}
+          >
             <td className="col-symbol">
               <div style={{ fontFamily: "var(--font-heading)", fontWeight: 600, fontSize: 12.5, letterSpacing: "0.02em" }}>
                 {r.symbol}

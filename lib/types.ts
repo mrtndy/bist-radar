@@ -1,11 +1,11 @@
 /**
  * Arayüz katmanının veri sözleşmesi. Motorun (`src/engine`) kendi tiplerini
- * (`Signal`, `Timeframe`) yeniden dışa aktarır; matematik tipi değil, sadece
- * isimlendirme paylaşımı içindir.
+ * (`Signal`, `Timeframe`, `ChartSeries`, `ScoreComponent`) yeniden dışa aktarır;
+ * matematik tipi değil, sadece isimlendirme paylaşımı içindir.
  */
-import type { Signal, Timeframe } from "../src/engine/types.ts";
+import type { ChartSeries, ScoreComponent, Signal, Timeframe } from "../src/engine/types.ts";
 
-export type { Signal, Timeframe };
+export type { ChartSeries, ScoreComponent, Signal, Timeframe };
 
 /** Tarama tablosundaki tek satır — API rotasının döndürdüğü, motor çıktısından türetilmiş alanlar. */
 export interface RowData {
@@ -45,6 +45,42 @@ export interface ScanResult {
 
 export interface ScanApiResponse extends ScanResult {
   tf: Timeframe;
+}
+
+/**
+ * Hisse detay paneli için tek sembol × zaman dilimi verisi — `public/data/detail/
+ * {SEMBOL}-{tf}.json` içeriği (bkz. tasks/03-detail-drawer.md §A, `lib/detail.ts`).
+ * Motorun `Indicators` + `Score` çıktısının, panelin ihtiyaç duyduğu alt kümesidir
+ * (ısınma amaçlı ara alanlar — `histRising`, `kRising` — dışarıda bırakılmıştır).
+ */
+export interface DetailData {
+  symbol: string;
+  name: string;
+  sector: string;
+  price: number;
+  /** Yüzde değişim. */
+  chg: number;
+  /** Stokastik %K / %D (son bar). */
+  k: number;
+  d: number;
+  rsi: number;
+  atrPct: number;
+  relVol: number;
+  pctB: number;
+  macd: number;
+  msig: number;
+  hist: number;
+  crossDir: number;
+  crossBars: number;
+  /** TL cinsinden bar hacmi (fiyat * lot). */
+  volTL: number;
+  hi70: number;
+  lo70: number;
+  score: number;
+  signal: Signal;
+  /** `scoreOf(ind, tf)` çıktısı — gerekçe metinleri (`n`) motordan birebir gelir. */
+  breakdown: ScoreComponent[];
+  chart: ChartSeries;
 }
 
 export type SignalFilter = "ALL" | "AL" | "SAT" | "NOTR";

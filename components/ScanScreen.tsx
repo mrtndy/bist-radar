@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import TopBar from "./TopBar";
 import FilterPanel from "./FilterPanel";
 import ScanTable, { EmptyState } from "./ScanTable";
+import DetailDrawer from "./DetailDrawer";
 import { formatLastUpdated, parseLenient } from "../lib/format";
 import type { FilterState, RowData, ScanApiResponse, ScanResult, SortDir, SortKey, Timeframe } from "../lib/types";
 
@@ -80,6 +81,11 @@ export default function ScanScreen({ initialTf, initialData }: ScanScreenProps) 
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
   const [sortKey, setSortKey] = useState<SortKey>("score");
   const [sortDir, setSortDir] = useState<SortDir>(-1);
+  // README "State Management": selectedSymbol (drawer). Zaman dilimi değişince panel
+  // açık kalır ve DetailDrawer aynı sembol için yeni `tf`'in verisini fetch eder
+  // (bkz. DetailDrawer'daki [symbol, tf] bağımlı efekt) — böylece tablo ve detay aynı
+  // anda o dilimin verisine geçer (README "Interactions & Behavior").
+  const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
 
   useEffect(() => {
     if (dataByTf[tf]) return;
@@ -221,11 +227,16 @@ export default function ScanScreen({ initialTf, initialData }: ScanScreenProps) 
               sortDir={sortDir}
               onSort={handleSort}
               onResetFilters={handleReset}
+              onSelectSymbol={setSelectedSymbol}
+              selectedSymbol={selectedSymbol}
             />
             {sortedRows.length === 0 && !isLoading ? <EmptyState onReset={handleReset} /> : null}
           </div>
         </div>
       </div>
+      {selectedSymbol ? (
+        <DetailDrawer symbol={selectedSymbol} tf={tf} onClose={() => setSelectedSymbol(null)} />
+      ) : null}
     </div>
   );
 }

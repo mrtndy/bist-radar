@@ -15,6 +15,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { getDetailData, listSymbols } from "../lib/detail.ts";
 import { getScanRows } from "../lib/scan-data.ts";
 import type { ScanApiResponse } from "../lib/types.ts";
 import type { Timeframe } from "../src/engine/types.ts";
@@ -22,6 +23,7 @@ import type { Timeframe } from "../src/engine/types.ts";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..");
 const OUT_DIR = path.join(ROOT, "public", "data");
+const DETAIL_DIR = path.join(OUT_DIR, "detail");
 
 const TFS: readonly Timeframe[] = ["G", "H", "S"];
 const TF_LABEL: Record<Timeframe, string> = { G: "Günlük", H: "Haftalık", S: "Saatlik" };
@@ -39,3 +41,32 @@ for (const tf of TFS) {
 }
 
 console.log("\nStatik tarama verisi üretildi.");
+
+// Detay paneli verisi: her sembol × zaman dilimi için ayrı JSON (bkz.
+// tasks/03-detail-drawer.md §A). İstek üzerine indirilecek şekilde tabloya
+// gömülmez — ScanTable'da tıklanan satır bu dosyayı fetch eder
+// (components/DetailDrawer.tsx). Bir sembol yukarıdaki taramada satır olarak
+// göründüyse (computeRows ile aynı atlama kuralları -> lib/detail.ts) burada da
+// bir dosya üretilir; aksi hâlde (dejenere seri, kısa bar geçmişi) o sembol/dilim
+// için dosya oluşmaz ve tabloda zaten satırı yoktur.
+console.log("\nDetay paneli verisi üretiliyor (public/data/detail/{SEMBOL}-{tf}.json)…");
+await mkdir(DETAIL_DIR, { recursive: true });
+
+let detailWritten = 0;
+let detailSeen = 0;
+for (const tf of TFS) {
+  const symbols = await listSymbols(tf);
+  let written = 0;
+  for (const symbol of symbols) {
+    const detail = await getDetailData(symbol, tf);
+    if (!detail) continue;
+    const outPath = path.join(DETAIL_DIR, `${symbol}-${tf}.json`);
+    await writeFile(outPath, JSON.stringify(detail), "utf8");
+    written++;
+  }
+  detailSeen += symbols.length;
+  detailWritten += written;
+  console.log(`  ${TF_LABEL[tf]} (${tf}): ${written}/${symbols.length} sembol -> detail/*-${tf}.json`);
+}
+
+console.log(`\nDetay verisi üretildi: ${detailWritten}/${detailSeen} dosya.`);

@@ -1,0 +1,129 @@
+name: Veriyi tazele ve yayınla
+
+on:
+  schedule:
+    # BIST kapanışı 18:10 TSİ (UTC+3) = 15:10 UTC. 16:00 UTC = 19:00 TSİ, kapanışa ~50 dk pay.
+    # GitHub cron'u yoğunlukta 5-30 dk (bazen daha fazla) gecikir — gün sonu verisi için sorun değil.
+    - cron: "0 16 * * 1-5"
+  workflow_dispatch: {}
+
+# Pages'e yayın için gereken izinler. contents:write yalnızca keepalive commit'i için.
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  # Yayın alt dizinde olacaksa (kullanici.github.io/repo-adi) basePath gerekir.
+  # Kullanıcı sitesinde (kullanici.github.io deposu) boş kalmalı.
+  NODE_VERSION: "24"
+  PYTHON_VERSION: "3.12"
+  # Ingest sonrası asgari sembol sayısı — altına düşerse BOŞ SİTE YAYINLAMAK YERİNE hata ver.
+  MIN_SYMBOLS: "400"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Bağımlılıklar
+        run: |
+          npm ci
+          python -m pip install --upgrade pip
+          pip install -r ingest/requirements.txt
+
+      - name: Hisse evrenini tazele (KAP)
+        id: universe
+        continue-on-error: true
+        run: node scripts/build-universe.ts
+
+      - name: KAP erişilemediyse depodaki evreni kullan
+        if: steps.universe.outcome == 'failure'
+        run: |
+          echo "::warning::KAP'tan evren çekilemedi (bulut IP'si engellenmiş olabilir); depodaki data/universe.json kullanılıyor."
+          test -s data/universe.json || { echo "::error::Yedek evren dosyası da yok — durduruldu."; exit 1; }
+
+      - name: Barları çek (Yahoo Finance)
+        run: |
+          for TF in G H S; do
+            echo "::group::ingest $TF"
+            python ingest/ingest.py --timeframe "$TF"
+            echo "::endgroup::"
+          done
+
+      # Yahoo bulut IP'lerini sınırlarsa ingest sessizce az sembol yazar. Boş/eksik bir siteyi
+      # yayınlamak, eski siteyi bırakmaktan daha kötü — burada durdur.
+      - name: Veri bütünlüğü kontrolü
+        run: |
+          fail=0
+          for TF in G H S; do
+            n=$(find "data/bars/$TF" -name '*.json' 2>/dev/null | wc -l)
+            echo "$TF: $n sembol"
+            if [ "$n" -lt "${MIN_SYMBOLS}" ]; then
+              echo "::error::$TF için yalnızca $n sembol indi (asgari ${MIN_SYMBOLS}). Yahoo bu sunucuyu sınırlıyor olabilir — yayın durduruldu, mevcut site olduğu gibi kalıyor."
+              fail=1
+            fi
+          done
+          [ "$fail" -eq 0 ]
+
+      - name: Motor parity testi
+        run: node scripts/parity.ts
+
+      - name: Tarama JSON'larını üret
+        run: npm run build:data
+
+      - name: Statik siteyi derle
+        env:
+          # kullanici.github.io deposu kök dizinde servis edilir; diğerleri /repo-adi altında.
+          NEXT_PUBLIC_BASE_PATH: ${{ endsWith(github.event.repository.name, '.github.io') && '' || format('/{0}', github.event.repository.name) }}
+        run: npm run build
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: out
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
+
+  # GitHub, 60 gün commit gelmeyen depolarda zamanlanmış işleri otomatik kapatır. Bu iş hiçbir
+  # şey commit'lemediği için sayaç dolardı; ayda bir boş commit atarak canlı tutuyoruz.
+  keepalive:
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Son commit 40 günden eskiyse dokun
+        run: |
+          last=$(git log -1 --format=%ct)
+          age=$(( ( $(date +%s) - last ) / 86400 ))
+          echo "son commit $age gün önce"
+          if [ "$age" -ge 40 ]; then
+            git config user.name  "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit --allow-empty -m "chore: zamanlanmış işi canlı tut (60 gün kuralı)"
+            git push
+          fi

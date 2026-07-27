@@ -2,8 +2,13 @@ name: Veriyi tazele ve yayınla
 
 on:
   schedule:
-    # BIST kapanışı 18:10 TSİ (UTC+3) = 15:10 UTC. 16:00 UTC = 19:00 TSİ, kapanışa ~50 dk pay.
-    # GitHub cron'u yoğunlukta 5-30 dk (bazen daha fazla) gecikir — gün sonu verisi için sorun değil.
+    # Seans içi tazeleme: her 15 dakikada bir, 07:00-15:59 UTC = 10:00-18:59 TSİ, hafta içi.
+    # (BIST seansı 10:00-18:10 TSİ.) GitHub cron'u yoğunlukta 5-30 dk gecikir, yani gerçekte
+    # 20-45 dk aralıklarla düşer — dakik DEĞİL, ama günde bir kereden çok daha taze.
+    # Dakiklik isteniyorsa dışarıdan workflow_dispatch ile tetiklenmeli (ölçüldü: dispatch
+    # koşuları 0 sn'de başlıyor); bkz. DEPLOY.md.
+    - cron: "*/15 7-15 * * 1-5"
+    # Kapanış sonrası kesin koşu: 16:00 UTC = 19:00 TSİ, kapanışa ~50 dk pay.
     - cron: "0 16 * * 1-5"
   workflow_dispatch: {}
 
@@ -113,6 +118,9 @@ jobs:
   # şey commit'lemediği için sayaç dolardı; ayda bir boş commit atarak canlı tutuyoruz.
   keepalive:
     needs: deploy
+    # Yalnızca akşam koşusunda ve elle tetiklemede — seans içi 15 dakikalık koşularda
+    # (günde ~36 kez) çalıştırmanın anlamı yok.
+    if: github.event_name != 'schedule' || github.event.schedule == '0 16 * * 1-5'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

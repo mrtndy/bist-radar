@@ -18,6 +18,7 @@
  */
 import { useEffect, useRef } from "react";
 import StockCard from "./StockCard";
+import type { Position, PositionMetrics } from "../lib/portfolio";
 import type { RowData } from "../lib/types";
 
 interface MobileListProps {
@@ -28,6 +29,17 @@ interface MobileListProps {
   /** Takip listesi (tasks/06-takip-listesi-ve-kolonlar.md §A) — karta iletilir, StockCard'daki yıldız için. */
   isWatched: (symbol: string) => boolean;
   onToggleWatch: (symbol: string) => void;
+  /**
+   * Portföy (tasks/07-portfoy-kar-zarar.md) — YALNIZCA Takibim sekmesi (WatchlistTab)
+   * geçirir. Hisseler sekmesindeki çağrıda bu prop `undefined` kalır, bu yüzden
+   * StockCard'ın portföy bölümü orada hiç render edilmez — "AYNI kart bileşeni" iki
+   * sekmede de kullanılmaya devam eder (tasks/06 yorumu), yalnızca bu prop farklı.
+   */
+  portfolio?: {
+    getPosition: (symbol: string) => Position | null;
+    getMetrics: (row: RowData) => PositionMetrics | null;
+    onEdit: (symbol: string) => void;
+  };
 }
 
 export default function MobileList({
@@ -37,6 +49,7 @@ export default function MobileList({
   onSelectSymbol,
   isWatched,
   onToggleWatch,
+  portfolio,
 }: MobileListProps) {
   const visible = rows.slice(0, visibleCount);
   const hasMore = visibleCount < rows.length;
@@ -78,6 +91,15 @@ export default function MobileList({
           onSelect={onSelectSymbol}
           isWatched={isWatched(row.symbol)}
           onToggleWatch={() => onToggleWatch(row.symbol)}
+          portfolio={
+            portfolio
+              ? {
+                  position: portfolio.getPosition(row.symbol),
+                  metrics: portfolio.getMetrics(row),
+                  onEdit: () => portfolio.onEdit(row.symbol),
+                }
+              : undefined
+          }
         />
       ))}
       {hasMore ? (

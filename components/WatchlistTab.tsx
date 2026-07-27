@@ -14,9 +14,13 @@
  *    listem" çipinin yanında — brief §A "Paylaş düğmesi" bir breakpoint'e
  *    bağlanmamış) tarafından kullanılır.
  */
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Check, Copy, Star } from "@phosphor-icons/react";
 import MobileList from "./MobileList";
+import PortfolioSummary from "./PortfolioSummary";
+import PositionForm from "./PositionForm";
+import { computeMetrics, computePortfolioSummary } from "../lib/portfolio";
+import type { PortfolioMap } from "../lib/portfolio";
 import type { RowData } from "../lib/types";
 import { buildShareUrl } from "../lib/watchlist";
 
@@ -78,7 +82,8 @@ export function ShareWatchlistButton({ symbols, className }: ShareWatchlistButto
         type="button"
         className="btn btn-secondary"
         onClick={() => void handleClick()}
-        style={{ gap: 6, width: "100%" }}
+        // minHeight 44: telefonda parmakla basılacak; kullanıcı yaşlıca.
+        style={{ gap: 6, width: "100%", minHeight: 44 }}
       >
         {state === "copied" ? <Check size={14} /> : <Copy size={14} />}
         {state === "copied" ? "Bağlantı kopyalandı" : "Listeyi paylaş"}
@@ -108,6 +113,15 @@ interface WatchlistTabProps {
   /** Ham takip listesi (paylaşım düğmesi + boş durum kararı için — `rows.length` ile
    * karıştırılmamalı: `rows` her zaman zaten yalnızca takip edilenlerdir). */
   symbols: string[];
+  /**
+   * Portföy (tasks/07-portfoy-kar-zarar.md) — bkz. lib/portfolio.ts `usePortfolio`.
+   * Takip listesinden BAĞIMSIZ saklanır (ScanScreen'de tutulur, buraya prop olarak
+   * geçirilir) — bir sembol takipten çıkarılıp geri eklendiğinde kayıt korunsun diye
+   * (görev "Kapsam" §Veri) bu state ASLA `isWatched`/`symbols`e göre budanmaz.
+   */
+  positions: PortfolioMap;
+  onSavePosition: (symbol: string, lot: number, maliyet: number) => void;
+  onDeletePosition: (symbol: string) => void;
 }
 
 export default function WatchlistTab({
@@ -118,9 +132,28 @@ export default function WatchlistTab({
   isWatched,
   onToggleWatch,
   symbols,
+  positions,
+  onSavePosition,
+  onDeletePosition,
 }: WatchlistTabProps) {
+  // Adet/maliyet formunun hangi sembol için açık olduğu — salt bu sekmenin kendi UI
+  // durumu (ScanScreen'e taşınmaz), DetailDrawer/FilterSheet'teki "yalnızca açıkken
+  // mount et" deseniyle AYNI (bkz. PositionForm altındaki koşullu render).
+  const [editingSymbol, setEditingSymbol] = useState<string | null>(null);
+
+  const getPosition = useCallback((symbol: string) => positions[symbol] ?? null, [positions]);
+  const getMetrics = useCallback(
+    (row: RowData) => computeMetrics(positions[row.symbol] ?? null, row.price),
+    [positions],
+  );
+  // BİLEREK `rows`dan (tam, sayfalamadan BAĞIMSIZ takip listesi) türetilir, `visibleCount`
+  // ile kırpılmış görünen alt kümeden DEĞİL — yoksa özet, kullanıcının ne kadar
+  // kaydırdığına göre değişen yanlış bir toplam gösterirdi (bkz. lib/portfolio.ts yorumu).
+  const summary = useMemo(() => computePortfolioSummary(rows, positions), [rows, positions]);
+
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: 0, flex: 1 }}>
+      {rows.length > 0 ? <PortfolioSummary summary={summary} /> : null}
       {symbols.length > 0 ? (
         <div style={{ padding: "10px 14px 0", flex: "none" }}>
           <ShareWatchlistButton symbols={symbols} />
@@ -136,8 +169,18 @@ export default function WatchlistTab({
           onSelectSymbol={onSelectSymbol}
           isWatched={isWatched}
           onToggleWatch={onToggleWatch}
+          portfolio={{ getPosition, getMetrics, onEdit: setEditingSymbol }}
         />
       )}
+      {editingSymbol ? (
+        <PositionForm
+          symbol={editingSymbol}
+          position={getPosition(editingSymbol)}
+          onClose={() => setEditingSymbol(null)}
+          onSave={(lot, maliyet) => onSavePosition(editingSymbol, lot, maliyet)}
+          onDelete={() => onDeletePosition(editingSymbol)}
+        />
+      ) : null}
     </div>
   );
 }

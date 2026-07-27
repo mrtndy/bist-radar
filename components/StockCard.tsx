@@ -9,9 +9,23 @@
  * veriler `DetailDrawer`'da (karta dokununca açılır) kalmaya devam ediyor.
  */
 import { changeColor, scoreColor, signalTagColor } from "../lib/colors";
-import { formatChange, formatInt, formatPrice } from "../lib/format";
+import { formatChange, formatInt, formatPrice, formatSignedPrice } from "../lib/format";
+import type { Position, PositionMetrics } from "../lib/portfolio";
 import type { RowData } from "../lib/types";
 import StarButton from "./StarButton";
+
+/**
+ * Portföy bölümü (tasks/07-portfoy-kar-zarar.md) — YALNIZCA Takibim sekmesi bu
+ * prop'u geçirir (bkz. MobileList.tsx `portfolio` prop, WatchlistTab.tsx). Hisseler
+ * sekmesindeki AYNI `StockCard`ta bu prop `undefined` kalır ve aşağıdaki blok hiç
+ * render edilmez — görev metni "Takibim sekmesindeki her kartta" ifadesini
+ * karşılamak için tek kart bileşenini bölmek yerine tercih edilen yol.
+ */
+interface StockCardPortfolioProps {
+  position: Position | null;
+  metrics: PositionMetrics | null;
+  onEdit: () => void;
+}
 
 interface StockCardProps {
   row: RowData;
@@ -19,9 +33,10 @@ interface StockCardProps {
   /** Takip listesi (tasks/06-takip-listesi-ve-kolonlar.md §A). */
   isWatched: boolean;
   onToggleWatch: () => void;
+  portfolio?: StockCardPortfolioProps;
 }
 
-export default function StockCard({ row, onSelect, isWatched, onToggleWatch }: StockCardProps) {
+export default function StockCard({ row, onSelect, isWatched, onToggleWatch, portfolio }: StockCardProps) {
   return (
     // `<button>` DEĞİL: içinde StarButton (kendi `<button>`'ı) var, buton içinde buton
     // geçersiz HTML olurdu. `role="button"` + `tabIndex`/`onKeyDown` ile klavye
@@ -143,6 +158,100 @@ export default function StockCard({ row, onSelect, isWatched, onToggleWatch }: S
           Dipnot değil, listenin en değerli bilgisi: brief "gövde ≥ 14px" kısıtı
           burada tam olarak uygulanır (14px, tesadüf değil). */}
       <div style={{ fontSize: 14, lineHeight: 1.45, color: "var(--color-neutral-200)" }}>{row.topReason}</div>
+
+      {portfolio ? (
+        <>
+          <div style={{ height: 1, background: "var(--color-neutral-800)", flex: "none" }} />
+          <PortfolioSection
+            hasPosition={portfolio.position != null}
+            metrics={portfolio.metrics}
+            onEdit={portfolio.onEdit}
+          />
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Kartın portföy bölümü — tasks/07-portfoy-kar-zarar.md "Gösterim". Geçerli bir
+ * pozisyon (lot+maliyet>0) yoksa YALNIZCA "Adet/maliyet ekle" bağlantısı (görev
+ * "Boş/kısmi durumlar": "kartta yalnızca fiyat görünsün" — üstteki fiyat zaten
+ * kartın başında gösteriliyor, burada ekstra para rakamı YOK). Varsa değer/kâr-
+ * zarar/maliyet satırları + "Düzenle" bağlantısı.
+ *
+ * Etiketlerde BİLEREK "yaklaşık" geçer (dış görev metni "Kimin kullanacağı" §2 —
+ * kesinlik iddia eden dil yasak, ör. "Portföy değeriniz" DENMEZ) — fiyata dayanan
+ * (gecikmeli) alanlar: değer + kâr/zarar. Maliyet kullanıcının kendi girdiği sabit
+ * bir sayı olduğu için (fiyata bağlı değil) "yaklaşık" İÇERMEZ.
+ */
+function PortfolioSection({
+  hasPosition,
+  metrics,
+  onEdit,
+}: {
+  hasPosition: boolean;
+  metrics: PositionMetrics | null;
+  onEdit: () => void;
+}) {
+  // Dokunma hedefi 44px: kullanıcı yaşlıca ve telefondan kullanıyor, bu düğme de
+  // pozisyon girmenin TEK yolu. Görsel olarak hâlâ bir bağlantı gibi görünsün diye
+  // yükseklik dolguyla veriliyor, kutu çizilmiyor.
+  const editLink = (label: string) => (
+    <button
+      type="button"
+      className="btn btn-ghost"
+      style={{
+        alignSelf: "flex-start",
+        padding: "0 8px",
+        minHeight: 44,
+        display: "inline-flex",
+        alignItems: "center",
+        fontSize: 13.5,
+      }}
+      onClick={(e) => {
+        e.stopPropagation();
+        onEdit();
+      }}
+    >
+      {label}
+    </button>
+  );
+
+  if (!metrics) {
+    return editLink(hasPosition ? "Düzenle" : "Adet/maliyet ekle");
+  }
+
+  const pnlColor = changeColor(metrics.pnl);
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
+        <span style={{ fontSize: 11.5, color: "var(--color-neutral-400)" }}>Yaklaşık değer</span>
+        <span
+          style={{
+            fontFamily: "var(--font-heading)",
+            fontWeight: 600,
+            fontSize: 14,
+            fontVariantNumeric: "tabular-nums",
+          }}
+        >
+          {formatPrice(metrics.value)}
+        </span>
+      </div>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
+        <span style={{ fontSize: 11.5, color: "var(--color-neutral-400)" }}>Kâr/zarar (yaklaşık)</span>
+        <span style={{ color: pnlColor, fontWeight: 600, fontSize: 13.5, fontVariantNumeric: "tabular-nums" }}>
+          {formatSignedPrice(metrics.pnl)} · {formatChange(metrics.pnlPct)}
+        </span>
+      </div>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
+        <span style={{ fontSize: 11, color: "var(--color-neutral-500)" }}>Maliyet</span>
+        <span style={{ fontSize: 11.5, color: "var(--color-neutral-500)", fontVariantNumeric: "tabular-nums" }}>
+          {formatPrice(metrics.cost)}
+        </span>
+      </div>
+      {editLink("Düzenle")}
     </div>
   );
 }

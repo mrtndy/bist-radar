@@ -27,6 +27,16 @@ export function formatChange(v: number): string {
   return `%${v > 0 ? "+" : ""}${nf2.format(v)}`;
 }
 
+/**
+ * İşaretli para tutarı — portföy kâr/zarar tutarı için (bkz.
+ * tasks/07-portfoy-kar-zarar.md). `formatChange` ile AYNI işaret kalıbı
+ * (pozitifte "+" öneki), `formatPrice` ile AYNI iki ondalık/"₺" son eki.
+ */
+export function formatSignedPrice(v: number): string {
+  if (!Number.isFinite(v)) return PLACEHOLDER;
+  return `${v > 0 ? "+" : ""}${nf2.format(v)} ₺`;
+}
+
 export function formatVolumeMn(v: number): string {
   if (!Number.isFinite(v)) return PLACEHOLDER;
   return `${nf1.format(v / 1e6)} Mn ₺`;

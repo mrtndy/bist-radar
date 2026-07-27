@@ -15,6 +15,7 @@ import WatchlistTab, { WatchlistEmptyState } from "./WatchlistTab";
 import ColumnMenu from "./ColumnMenu";
 import { formatLastUpdated, parseLenient } from "../lib/format";
 import { fetchNewsFeed } from "../lib/news";
+import { usePortfolio } from "../lib/portfolio";
 import { useWatchlist } from "../lib/watchlist";
 import { COLUMN_LABELS, useColumnLayout } from "../lib/columns";
 import type {
@@ -166,6 +167,11 @@ export default function ScanScreen({ initialTf, initialData }: ScanScreenProps) 
   // lib/watchlist.ts), burada yalnızca sonucu kullanılır.
   const { symbols: watchlistSymbols, isWatched, toggle: toggleWatch, pendingImport, resolvePendingImport } =
     useWatchlist();
+  // Portföy: adet + ortalama maliyet (tasks/07-portfoy-kar-zarar.md) — takip
+  // listesinden BAĞIMSIZ localStorage anahtarı (bkz. lib/portfolio.ts), aynı
+  // mount-sonrası okuma deseni. Yalnızca Takibim sekmesine (WatchlistTab) geçirilir;
+  // Hisseler sekmesindeki `MobileList` çağrısı bunu HİÇ almaz.
+  const { positions: portfolioPositions, savePosition, removePosition } = usePortfolio();
   // Masaüstü "Takip listem" çipi (bkz. FilterPanel) — BİLEREK `FilterState`in parçası
   // DEĞİL: "Filtreleri sıfırla" bunu sıfırlamamalı (skor/sektör/vb. gibi türetilmiş bir
   // filtre değil, "hangi hisselerim var" sorusuna bakan ayrı bir eksen).
@@ -488,6 +494,9 @@ export default function ScanScreen({ initialTf, initialData }: ScanScreenProps) 
               isWatched={isWatched}
               onToggleWatch={toggleWatch}
               symbols={watchlistSymbols}
+              positions={portfolioPositions}
+              onSavePosition={savePosition}
+              onDeletePosition={removePosition}
             />
           ) : (
             <>

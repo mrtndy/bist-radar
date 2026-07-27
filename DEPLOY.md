@@ -35,6 +35,17 @@ Hafta içi her gün **16:00 UTC = 19:00 TSİ**, yani BIST kapanışından ~50 da
 GitHub'ın zamanlanmış işleri yoğunlukta 5-30 dakika gecikebilir; gün sonu verisi için önemsiz.
 İstediğin an Actions sekmesinden elle de tetikleyebilirsin.
 
+## Seans içinde elle tetiklersen
+
+Zamanlanmış koşu kapanıştan sonra çalıştığı için günlük barlar tamamlanmış olur. Ama Actions
+sekmesinden **seans sırasında** elle tetiklersen, o günün barı henüz kapanmamıştır: göstergeler
+yarım bar üzerinden hesaplanır ve sinyaller kapanışa kadar değişebilir. Yanlış değil — gün içi
+takip için istenen davranış bu — ama o an gördüğün sinyal geçicidir.
+
+Ayrıca veri her hâlükârda **15 dakika gecikmelidir** (2026-07-27 seans içinde ölçüldü: saat 15:51
+iken Yahoo'nun son 1 dakikalık barı 15:36). Emir vermeden önce canlı fiyata aracı kurum
+uygulamandan bak.
+
 ## İlk koşuda dikkat edilecek şey
 
 **Yahoo Finance'in GitHub sunucularına izin verip vermediği bilinmiyor.** Yahoo, bulut IP'lerini

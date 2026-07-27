@@ -66,7 +66,7 @@ for (const f of files) {
   }
   try {
     const ind = indicators(bars, tf);
-    const { score, breakdown } = scoreOf(ind);
+    const { score, breakdown } = scoreOf(ind, tf);
     if (!Number.isFinite(ind.price) || !Number.isFinite(score)) {
       skipped.nonFinite = (skipped.nonFinite ?? 0) + 1;
       continue;

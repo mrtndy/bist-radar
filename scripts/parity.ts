@@ -41,6 +41,10 @@ async function loadOriginal() {
 }
 
 const diffs: string[] = [];
+interface Comp { k: string; p: number; n: string }
+/** ATR ölçeklemesinin fiilen etkin olduğunu doğrulamak için sayaçlar. */
+const atrChecked: Record<string, number> = {};
+const atrChanged: Record<string, number> = {};
 
 function compare(a: unknown, b: unknown, trail: string): void {
   if (isIgnored(trail)) return;
@@ -93,9 +97,26 @@ for (const sym of SYMBOLS) {
       const actualInd = indicators(bars, tf);
       compare(expectedInd, actualInd as unknown as AnyRec, "");
 
-      const expectedScore = orig._scoreOf(expectedInd);
-      const actualScore = scoreOf(actualInd);
-      compare(expectedScore, actualScore as unknown as AnyRec, "score");
+      // (a) Günlük skorlama prototiple BİREBİR aynı kalmalı.
+      const expectedScore = orig._scoreOf(expectedInd) as { score: number; breakdown: Comp[] };
+      compare(expectedScore, scoreOf(actualInd, "G") as unknown as AnyRec, "score");
+
+      // (b) Haftalık/saatlik yalnızca ATR bileşeninde ayrışabilir (ATR_TIMEFRAME_SCALE).
+      //     Diğer beş bileşen prototiple aynı kalmalı — ölçekleme sızıntı yapmamalı.
+      const scaled = scoreOf(actualInd, tf);
+      const expNonAtr = expectedScore.breakdown.filter((b) => b.k !== "ATR");
+      const actNonAtr = scaled.breakdown.filter((b) => b.k !== "ATR");
+      compare(expNonAtr, actNonAtr as unknown as AnyRec, `score.breakdown[!ATR](${tf})`);
+      if (tf !== "G" && expectedScore.breakdown.length !== scaled.breakdown.length) {
+        diffs.push(`score.breakdown(${tf}): bileşen sayısı değişti`);
+      }
+      // Ölçeklemenin gerçekten etkin olduğunu say (aşağıda sıfırsa katsayı ölü demektir).
+      if (tf !== "G") {
+        const a = expectedScore.breakdown.find((b) => b.k === "ATR");
+        const b = scaled.breakdown.find((b) => b.k === "ATR");
+        atrChecked[tf] = (atrChecked[tf] ?? 0) + 1;
+        if (a && b && (a.p !== b.p || a.n !== b.n)) atrChanged[tf] = (atrChanged[tf] ?? 0) + 1;
+      }
       cases++;
     }
   }
@@ -108,4 +129,20 @@ if (uniq.length) {
   if (uniq.length > 25) console.error(`  … +${uniq.length - 25} daha`);
   process.exit(1);
 }
-console.log(`PARITY OK — ${cases} vaka (${SYMBOLS.length} sembol x 4 tier x 3 zaman dilimi), tüm alanlar eşleşti.`);
+// Ölçekleme hiç devreye girmiyorsa katsayı ölüdür — testin sessizce geçmesine izin verme.
+for (const tf of ["H", "S"]) {
+  if (!atrChanged[tf]) {
+    console.error(
+      `PARITY FAIL — ${tf} diliminde ATR ölçeklemesi hiçbir vakada etkili olmadı ` +
+        `(${atrChecked[tf] ?? 0} vaka). ATR_TIMEFRAME_SCALE bağlanmamış olabilir.`,
+    );
+    process.exit(1);
+  }
+}
+
+console.log(`PARITY OK — ${cases} vaka (${SYMBOLS.length} sembol x 4 tier x 3 zaman dilimi).`);
+console.log(`  günlük skorlama prototiple birebir; ATR dışı bileşenler her dilimde birebir.`);
+console.log(
+  `  ATR ölçeklemesi etkin: H ${atrChanged.H ?? 0}/${atrChecked.H ?? 0} vakada, ` +
+    `S ${atrChanged.S ?? 0}/${atrChecked.S ?? 0} vakada farklılaştı (beklenen).`,
+);

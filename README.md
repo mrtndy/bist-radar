@@ -51,18 +51,22 @@ Motor dosyalarına dokunan her değişiklikten sonra çalıştır. Kasıtlı iki
 
 ## Bilinen konular
 
-**1. ATR skorlaması yalnızca günlük zaman diliminde ayırt edici.**
-`scoreOf()` ATR bandı %2–6'yı "ideal" (+6) sayar. Gerçek veriyle medyan ATR:
+**1. ~~ATR skorlaması yalnızca günlük dilimde ayırt edici.~~ ÇÖZÜLDÜ 2026-07-27.**
+Prototipin ATR bandı (%2–6 ideal) günlük barlara göre kalibreydi; sentetik demo verisi bunu
+gizlemişti. Gerçek veriyle haftalıkta 448/548 hisse sabit −5, saatlikte 545/611 hisse sabit −2
+alıyordu — bileşen ayırt etmeyi bırakmıştı. `ATR_TIMEFRAME_SCALE` ile eşikler dilime göre
+ölçekleniyor (katsayılar ölçülen medyan oranları: H 2,442 · S 0,262):
 
-| Zaman dilimi | Medyan ATR% | Sonuç |
+| Dilim | Önce | Sonra |
 |---|---|---|
-| Günlük | 4,21 | 499/598 hisse +6 — tasarlandığı gibi çalışıyor |
-| Haftalık | 10,27 | 448/548 hisse sabit **−5** — ayırt etmiyor |
-| Saatlik | 1,10 | 545/611 hisse sabit **−2** — ayırt etmiyor |
+| Günlük | %83 ideal | %83 ideal — **değişmedi** |
+| Haftalık | %82 sabit "aşırı volatil" | %87 ideal / %8 yüksek / %4 aşırı |
+| Saatlik | %89 sabit "düşük volatilite" | %72 ideal / %15 yüksek / %9 aşırı |
 
-Prototipin sentetik verisi bunu gizlemişti. Düzeltmek eşikleri zaman dilimine göre ölçeklemeyi
-gerektirir (kabaca bar süresinin kareköküyle) — bu **ürün kararıdır**, sinyal anlamını değiştirir.
-Handoff "birebir portla" dediği için motor kasıtlı olarak **değiştirilmedi**.
+`G: 1` kasıtlı — günlük tarama prototiple birebir kalır. `scripts/parity.ts` üç şeyi birden
+doğrular: günlük skorlama birebir, **ATR dışı bileşenler her dilimde birebir** (ölçekleme sızıntı
+yapmıyor), ve ölçekleme H/S'de fiilen etkin. Katsayıları yeniden türetmek için
+`node scripts/atr-calibration.ts`.
 
 **2. Sektör bilgisi eksik.** KAP'ta ve İş Yatırım'ın açık uçlarında makinece okunabilir sektör
 alanı yok (İş Yatırım sektör uçları HTTP 401). Şu an prototipin küratörlü 158 hisselik listesinden

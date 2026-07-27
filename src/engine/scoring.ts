@@ -3,17 +3,47 @@
  * fonksiyonunun birebir portu. Puanlar, eşikler ve Türkçe gerekçe metinleri
  * orijinaliyle karakter düzeyinde aynıdır; `tests/parity.test.ts` bunu doğrular.
  */
-import type { Indicators, Score, ScoreComponent, Signal } from "./types.ts";
+import type { Indicators, Score, ScoreComponent, Signal, Timeframe } from "./types.ts";
 
 /** Sinyal eşikleri — handoff README: AL >= 65 (55-80 aralığında ayarlanabilir), SAT <= 38. */
 export const SIGNAL_THRESHOLDS = { buy: 65, sell: 38 } as const;
 
+/**
+ * ATR eşiklerinin zaman dilimine göre ölçeği.
+ *
+ * Prototipin ATR bandı (%2-6 ideal) günlük barlara göre kalibreydi ve demo verisinde sorun
+ * görünmüyordu. Gerçek BIST verisiyle 619 hisse ölçüldüğünde (2026-07-27) bandın diğer
+ * dilimlerde tamamen dışarıda kaldığı ortaya çıktı — ATR bileşeni hisseleri ayırmayı bırakıp
+ * herkese aynı sabit puanı veriyordu:
+ *
+ *   dilim | p10   | medyan | p90    | ölçeksiz sonuç
+ *   ------|-------|--------|--------|--------------------------------------
+ *   G     |  2,65 |   4,21 |   6,40 | %83 ideal (+6) — tasarlandığı gibi
+ *   H     |  7,41 |  10,27 |  15,19 | 448/548 sabit "aşırı volatil" (-5)
+ *   S     |  0,67 |   1,10 |   2,03 | 545/611 sabit "düşük volatilite" (-2)
+ *
+ * Katsayılar bu ölçümdeki medyan oranlarıdır (H 10,27/4,21, S 1,10/4,21). Böylece her dilimde
+ * bant kendi medyanına göre günlüktekiyle aynı yerde durur. Teorik √zaman ölçeklemesi haftalıkta
+ * yakın (√5 = 2,24) ama saatlikte sapıyor (gün içi ortalamaya dönüş + gecelik boşluğun saatlik
+ * barda olmaması), o yüzden teori yerine ölçüm kullanıldı.
+ *
+ * `G: 1` kasıtlıdır — günlük tarama prototiple birebir aynı kalır ve `scripts/parity.ts` bunu
+ * doğrulamayı sürdürür. Piyasa rejimi kalıcı olarak değişirse katsayılar
+ * `scripts/atr-calibration.ts` ile yeniden türetilmelidir.
+ */
+export const ATR_TIMEFRAME_SCALE: Record<Timeframe, number> = { G: 1, H: 2.442, S: 0.262 };
+
 /** Orijinaldeki `toFixed(1).replace(".",",")` — Türkçe ondalık ayırıcı. */
 const tr1 = (x: number): string => x.toFixed(1).replace(".", ",");
 
-export function scoreOf(d: Indicators): Score {
+/**
+ * @param tf Zaman dilimi — yalnızca ATR eşiklerini ölçekler (bkz. `ATR_TIMEFRAME_SCALE`).
+ *           Varsayılan `"G"`, prototipin `scoreOf(d)` davranışıyla birebir aynıdır.
+ */
+export function scoreOf(d: Indicators, tf: Timeframe = "G"): Score {
   const B: ScoreComponent[] = [];
   const add = (k: string, p: number, n: string) => B.push({ k, p, n });
+  const atrK = ATR_TIMEFRAME_SCALE[tf] ?? 1;
 
   if (d.crossDir > 0 && d.crossBars <= 3) add("MACD", 10, "AL kesişimi (" + d.crossBars + " bar önce)");
   else if (d.crossDir < 0 && d.crossBars <= 3) add("MACD", -10, "SAT kesişimi (" + d.crossBars + " bar önce)");
@@ -41,9 +71,9 @@ export function scoreOf(d: Indicators): Score {
   else if (d.relVol < 0.7) add("Hacim", -5, "Zayıf hacim");
   else add("Hacim", 0, "Ortalama seviyede");
 
-  if (d.atrPct >= 2 && d.atrPct <= 6) add("ATR", 6, "İdeal volatilite bandı (%" + tr1(d.atrPct) + ")");
-  else if (d.atrPct > 8) add("ATR", -5, "Aşırı volatil (%" + tr1(d.atrPct) + ")");
-  else if (d.atrPct > 6) add("ATR", 1, "Yüksek volatilite");
+  if (d.atrPct >= 2 * atrK && d.atrPct <= 6 * atrK) add("ATR", 6, "İdeal volatilite bandı (%" + tr1(d.atrPct) + ")");
+  else if (d.atrPct > 8 * atrK) add("ATR", -5, "Aşırı volatil (%" + tr1(d.atrPct) + ")");
+  else if (d.atrPct > 6 * atrK) add("ATR", 1, "Yüksek volatilite");
   else add("ATR", -2, "Düşük volatilite (%" + tr1(d.atrPct) + ")");
 
   if (d.pctB > 1 && d.relVol >= 1.5) add("Bollinger", 6, "Üst bant kırılımı — hacim teyitli");

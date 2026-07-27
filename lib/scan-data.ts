@@ -85,7 +85,7 @@ async function computeRows(tf: Timeframe, barDir: string, files: string[]): Prom
 
     try {
       const ind = indicators(bars, tf);
-      const { score } = scoreOf(ind);
+      const { score } = scoreOf(ind, tf);
       if (!Number.isFinite(ind.price) || !Number.isFinite(score)) continue;
       const u = meta.get(symbol);
       const signal = signalOf(score);

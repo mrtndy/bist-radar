@@ -20,8 +20,10 @@ import {
   formatRatio1,
   formatChange,
 } from "../lib/format";
-import type { RowData, SortDir, SortKey } from "../lib/types";
+import type { RowData, SortDir, SortKey, Timeframe } from "../lib/types";
 import { COLUMN_LABELS, FIXED_COLUMN, type ColumnId } from "../lib/columns";
+import { matchExcluded, useExcludedList } from "../lib/excluded";
+import ExcludedNotice from "./ExcludedNotice";
 import StarButton from "./StarButton";
 
 interface ColumnDef {
@@ -370,11 +372,81 @@ export default function ScanTable({
   );
 }
 
-export function EmptyState({ onReset }: { onReset: () => void }) {
+interface EmptyStateProps {
+  onReset: () => void;
+  /** Arama kutusundaki GÜNCEL sorgu — bkz. tasks/09-eleme-gorunurlugu.md §B. */
+  query: string;
+  tf: Timeframe;
+  onJumpToTf: (tf: Timeframe) => void;
+}
+
+/**
+ * Boş sonuç ekranı — İKİ farklı sebep olabilir (bkz. tasks/09-eleme-gorunurlugu.md §B,
+ * EN ÖNEMLİ PARÇA):
+ *  1. Arama sorgusu bu dilimde ELENMİŞ bir sembolle/isimle eşleşiyor -> sebebini açıkla
+ *     (bar sayısı, gereken asgari, ilk işlem tarihi) + varsa "başka dilime geç" düğmesi
+ *     (bkz. ExcludedNotice) — gerçek kullanıcı şikâyetinin (ORZAX) doğrudan cevabı.
+ *  2. Diğer TÜM durumlar (filtre kombinasyonu boş döndürdü, sorgu hiçbir şeye/hiçbir
+ *     elenen sembole uymuyor, sorgu boş) -> ESKİ genel mesaj (kabul kriteri 9: "zzzz"
+ *     araması bunu göstermeli — regresyon yok).
+ * Elenen listesi İSTEK ÜZERİNE çekilir (`useExcludedList`, görev "Sert kısıtlar") —
+ * bu bileşen HER render'da çeker (tf başına önbellekli/paylaşılan tek istek, bkz.
+ * lib/excluded.ts), yalnızca SONUCU sorgu boşken kullanılmaz.
+ */
+export function EmptyState({ onReset, query, tf, onJumpToTf }: EmptyStateProps) {
+  const excludedList = useExcludedList(tf);
+  const trimmed = query.trim();
+  const matches = trimmed && excludedList ? matchExcluded(excludedList, trimmed) : [];
+
+  // `flex:"1 1 auto", minHeight:0, overflowY:"auto"` HER ÜÇ dalda da — `MobileList`teki
+  // `scrollRef` div'iyle AYNI desen (bkz. o dosya). Ölçüldü: 812×375'te (yan çevrilmiş
+  // telefon, isShortMobile) ExcludedNotice + "Filtreleri sıfırla" düğmesi eski 2 satırlık
+  // genel mesajdan daha uzun — bu boyut olmadan üst atalardan biri `overflow:hidden`
+  // (bkz. app/globals.css `html,body`) olduğu için alt kısım kırpılıp ULAŞILAMAZ hâle
+  // geliyordu (düğme DOM'da var ama görünürde/erişilebilir değildi). Masaüstünde bu
+  // bileşenin zaten kendi `overflow:auto` atası var (bkz. ScanScreen.tsx) — burada
+  // ekstra bir iç scroll konteyneri fazladan bulunsa da ZARARSIZ (yalnızca içerik gerçekten
+  // taştığında devreye girer).
+  const scrollableRootStyle = { flex: "1 1 auto", minHeight: 0, overflowY: "auto" as const, boxSizing: "border-box" as const };
+
+  if (trimmed && excludedList === null) {
+    // Elenen listesi henüz gelmedi — "eşleşen hisse yok" mesajının bir an görünüp
+    // hemen ardından açıklamaya dönüşmesi (flaş) yerine nötr bir ara durum.
+    return (
+      <div style={{ ...scrollableRootStyle, padding: 48, textAlign: "center", color: "var(--color-neutral-400)", fontSize: 13 }}>
+        Aranıyor…
+      </div>
+    );
+  }
+
+  if (matches.length > 0) {
+    return (
+      <div
+        style={{
+          ...scrollableRootStyle,
+          padding: "32px 20px",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: 16,
+        }}
+      >
+        <ExcludedNotice entries={matches} onJumpToTf={onJumpToTf} />
+        {/* `.btn-lg` (≥44×44px) — bkz. tasks/09-eleme-gorunurlugu.md "Sert kısıtlar"
+            (dokunma hedefi, mobilde 3 kez atlanmış). Bu düğme ESKİDEN (aşağıdaki genel
+            mesaj dalında) `.btn-secondary` idi (29px) — burada YENİ, daha sık ulaşılan
+            bir yol açtığımız için ikisi de büyütüldü, tutarlılık için. */}
+        <button type="button" className="btn btn-secondary btn-lg" onClick={onReset}>
+          Filtreleri sıfırla
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <div style={{ padding: 48, textAlign: "center", color: "var(--color-neutral-400)", fontSize: 13 }}>
+    <div style={{ ...scrollableRootStyle, padding: 48, textAlign: "center", color: "var(--color-neutral-400)", fontSize: 13 }}>
       <div style={{ marginBottom: 12 }}>Filtrelerle eşleşen hisse yok.</div>
-      <button type="button" className="btn btn-secondary" onClick={onReset}>
+      <button type="button" className="btn btn-secondary btn-lg" onClick={onReset}>
         Filtreleri sıfırla
       </button>
     </div>

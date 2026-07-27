@@ -14,15 +14,27 @@ import path from "node:path";
 import { indicators, MIN_BARS } from "../src/engine/indicators.ts";
 import { scoreOf, signalOf } from "../src/engine/scoring.ts";
 import type { Bar, ScoreComponent, Timeframe, UniverseEntry } from "../src/engine/types.ts";
-import type { RowData, ScanResult } from "./types";
+import type { ExcludedEntry, RowData, ScanResult } from "./types";
 
 const ROOT = process.cwd();
 const DATA_DIR = path.join(ROOT, "data");
 const NEWS_COUNTS_PATH = path.join(ROOT, "public", "data", "news", "_counts.json");
 
+/** Sırayla TÜM zaman dilimleri — `getExcludedRows`teki çapraz-dilim "başka nerede mevcut" kontrolü için. */
+const ALL_TFS: readonly Timeframe[] = ["G", "H", "S"];
+
+/** `ExcludedEntry`nin `availableIn` alanı HARİÇ geri kalanı — bu, tek bir `tf` için ucuzca
+ * hesaplanabilir/önbelleklenebilir; `availableIn` ise DİĞER dilimlerin taranmış satırlarına
+ * bakmayı gerektirir, bu yüzden yalnızca `getExcludedRows` çağrıldığında (istek üzerine)
+ * sonradan eklenir (bkz. aşağısı) — sayfaya gömülmeyen, istek üzerine indirilen tek şey bu
+ * değil elbette (tasks/09 "Sert kısıtlar"), ama iç önbellek bu ayrımı yine de yapıyor ki
+ * `computeScan` tek bir dilimin dosyalarını okuyarak çalışmaya devam etsin. */
+type ExcludedEntryBase = Omit<ExcludedEntry, "availableIn">;
+
 interface CacheEntry {
   fingerprint: string;
   rows: RowData[];
+  excluded: ExcludedEntryBase[];
   fetchedAt: number | null;
 }
 
@@ -106,31 +118,72 @@ async function readFetchedAt(tf: Timeframe): Promise<number | null> {
   }
 }
 
-async function computeRows(tf: Timeframe, barDir: string, files: string[]): Promise<RowData[]> {
+/**
+ * Bar dosyalarını okuyup hem satırları HEM de elenen sembolleri üretir (bkz.
+ * tasks/09-eleme-gorunurlugu.md §A — `computeRows` eskiden bunları sessizce `continue`
+ * ile atlıyordu). Satır üretim MANTIĞI (üç aşamalı kapı: parse -> bar sayısı -> motor)
+ * ESKİ `computeRows` ile birebir AYNI — yalnızca her `continue` noktasında artık NEDEN
+ * bilgisi de kaydediliyor. MIN_BARS burada DEĞİŞTİRİLMEZ, yalnızca motordan içe aktarılan
+ * sabit karşılaştırma için kullanılır (görev "Sert kısıtlar").
+ */
+async function computeScan(
+  tf: Timeframe,
+  barDir: string,
+  files: string[],
+): Promise<{ rows: RowData[]; excluded: ExcludedEntryBase[] }> {
   const universe = await getUniverse();
   const meta = new Map(universe.map((u) => [u.symbol, u]));
   const newsCounts = await getNewsCounts();
   const rows: RowData[] = [];
+  const excluded: ExcludedEntryBase[] = [];
+  const seen = new Set<string>();
 
   for (const f of files) {
     const symbol = f.replace(/\.json$/, "");
+    seen.add(symbol);
+    const u = meta.get(symbol);
+    const name = u?.name ?? symbol;
+
     let bars: Bar[];
     try {
       bars = JSON.parse(await readFile(path.join(barDir, f), "utf8")) as Bar[];
     } catch {
+      // Dosya var ama okunamadı/bozuk JSON — brief'in 3 sebep kodunda ayrı bir karşılığı
+      // yok; en yakını "veri-yok" (kullanılabilir bar verisi fiilen yok).
+      excluded.push({ symbol, name, bars: 0, minBars: MIN_BARS, reason: "veri-yok", firstBarAt: null });
       continue;
     }
-    if (!Array.isArray(bars) || bars.length < MIN_BARS) continue;
+    if (!Array.isArray(bars) || bars.length < MIN_BARS) {
+      const n = Array.isArray(bars) ? bars.length : 0;
+      excluded.push({
+        symbol,
+        name,
+        bars: n,
+        minBars: MIN_BARS,
+        reason: "az-bar",
+        firstBarAt: n > 0 ? bars[0].t : null,
+      });
+      continue;
+    }
 
     try {
       const ind = indicators(bars, tf);
       const { score, breakdown } = scoreOf(ind, tf);
-      if (!Number.isFinite(ind.price) || !Number.isFinite(score)) continue;
-      const u = meta.get(symbol);
+      if (!Number.isFinite(ind.price) || !Number.isFinite(score)) {
+        excluded.push({
+          symbol,
+          name,
+          bars: bars.length,
+          minBars: MIN_BARS,
+          reason: "hesap-hatasi",
+          firstBarAt: bars[0].t,
+        });
+        continue;
+      }
       const signal = signalOf(score);
       rows.push({
         symbol,
-        name: u?.name ?? symbol,
+        name,
         sector: u?.sector ?? "Diğer",
         price: ind.price,
         chg: ind.chg,
@@ -150,33 +203,74 @@ async function computeRows(tf: Timeframe, barDir: string, files: string[]): Prom
       });
     } catch {
       // Motor hatası (ör. dejenere seri) — bu sembolü atla, taramanın kalanını etkilemesin.
-      continue;
+      excluded.push({
+        symbol,
+        name,
+        bars: bars.length,
+        minBars: MIN_BARS,
+        reason: "hesap-hatasi",
+        firstBarAt: bars[0].t,
+      });
     }
   }
 
+  // Evrende olup bu dilim için hiç bar dosyası olmayan semboller de "veri-yok" (görev §A
+  // son cümlesi) — yukarıdaki döngü yalnızca VAR OLAN dosyaları görür, bu yüzden ayrı geçiş.
+  for (const u of universe) {
+    if (seen.has(u.symbol)) continue;
+    excluded.push({ symbol: u.symbol, name: u.name, bars: 0, minBars: MIN_BARS, reason: "veri-yok", firstBarAt: null });
+  }
+
   rows.sort((a, b) => a.symbol.localeCompare(b.symbol, "tr"));
-  return rows;
+  excluded.sort((a, b) => a.symbol.localeCompare(b.symbol, "tr"));
+  return { rows, excluded };
 }
 
-/** Bir zaman dilimi için tarama satırlarını döner; bar dosyaları değişmediyse önbellekten. */
-export async function getScanRows(tf: Timeframe): Promise<ScanResult> {
+/** Bar dizini fingerprint'ine göre önbellekli hesaplama — `getScanRows`/`getExcludedRows`
+ * ORTAK bu fonksiyonu kullanır, dosyalar tek seferde okunur/hesaplanır. */
+async function ensureComputed(tf: Timeframe): Promise<CacheEntry> {
   const barDir = path.join(DATA_DIR, "bars", tf);
   const files = (await readdir(barDir)).filter((f) => f.endsWith(".json"));
   const fingerprint = await fingerprintDir(barDir, files);
 
   const cached = scanCache.get(tf);
-  let rows: RowData[];
-  let fetchedAt: number | null;
+  if (cached && cached.fingerprint === fingerprint) return cached;
 
-  if (cached && cached.fingerprint === fingerprint) {
-    rows = cached.rows;
-    fetchedAt = cached.fetchedAt;
-  } else {
-    rows = await computeRows(tf, barDir, files);
-    fetchedAt = await readFetchedAt(tf);
-    scanCache.set(tf, { fingerprint, rows, fetchedAt });
-  }
+  const { rows, excluded } = await computeScan(tf, barDir, files);
+  const fetchedAt = await readFetchedAt(tf);
+  const entry: CacheEntry = { fingerprint, rows, excluded, fetchedAt };
+  scanCache.set(tf, entry);
+  return entry;
+}
 
+/** Bir zaman dilimi için tarama satırlarını döner; bar dosyaları değişmediyse önbellekten. */
+export async function getScanRows(tf: Timeframe): Promise<ScanResult> {
+  const { rows, fetchedAt } = await ensureComputed(tf);
   const sectors = await getSectorList();
   return { rows, total: rows.length, fetchedAt, sectors };
+}
+
+/**
+ * Bir zaman diliminde elenen (taranamayan) sembolleri döner — `public/data/
+ * excluded-{tf}.json` içeriği (bkz. `scripts/build-static.ts`). Her girdiye, sembolün
+ * BAŞARIYLA tarandığı DİĞER dilimler (`availableIn`) de eklenir — bunun için diğer iki
+ * dilimin `getScanRows`u çağrılır (zaten önbellekli; `scripts/build-static.ts` bu
+ * fonksiyonu çağırmadan ÖNCE üç dilimi de bir kez hesapladığı için ekstra dosya okuması
+ * OLMAZ) — tasks/09-eleme-gorunurlugu.md §B'deki "başka dilime geç" düğmesi bunu kullanır.
+ */
+export async function getExcludedRows(tf: Timeframe): Promise<ExcludedEntry[]> {
+  const { excluded } = await ensureComputed(tf);
+  if (excluded.length === 0) return [];
+
+  const otherTfs = ALL_TFS.filter((t) => t !== tf);
+  const otherResults = await Promise.all(otherTfs.map((t) => getScanRows(t)));
+  const availableSets = otherTfs.map((t, i) => ({
+    tf: t,
+    symbols: new Set(otherResults[i].rows.map((r) => r.symbol)),
+  }));
+
+  return excluded.map((e) => ({
+    ...e,
+    availableIn: availableSets.filter(({ symbols }) => symbols.has(e.symbol)).map(({ tf: otf }) => otf),
+  }));
 }

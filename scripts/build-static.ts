@@ -16,7 +16,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { getDetailData, listSymbols } from "../lib/detail.ts";
-import { getScanRows } from "../lib/scan-data.ts";
+import { getExcludedRows, getScanRows } from "../lib/scan-data.ts";
 import type { ScanApiResponse } from "../lib/types.ts";
 import type { Timeframe } from "../src/engine/types.ts";
 
@@ -41,6 +41,22 @@ for (const tf of TFS) {
 }
 
 console.log("\nStatik tarama verisi üretildi.");
+
+// Elenen (taranamayan) sembol listesi — her dilim için ayrı JSON (bkz.
+// tasks/09-eleme-gorunurlugu.md §A/§D). `computeRows` (şimdiki adıyla `computeScan`,
+// bkz. lib/scan-data.ts) artık MIN_BARS altında kalan/verisi olmayan/motor hatası veren
+// sembolleri de topluyor; burada yalnızca yazılıyor. İSTEK ÜZERİNE indirilecek şekilde
+// ana `scan-{tf}.json`a GÖMÜLMEZ (görev "Sert kısıtlar") — ayrı dosya, ayrı fetch.
+console.log("\nElenen (taranamayan) sembol listesi üretiliyor (public/data/excluded-{G,H,S}.json)…");
+let excludedTotal = 0;
+for (const tf of TFS) {
+  const excluded = await getExcludedRows(tf);
+  excludedTotal += excluded.length;
+  const outPath = path.join(OUT_DIR, `excluded-${tf}.json`);
+  await writeFile(outPath, JSON.stringify(excluded), "utf8");
+  console.log(`  ${TF_LABEL[tf]} (${tf}): ${excluded.length} sembol elendi -> ${path.relative(ROOT, outPath)}`);
+}
+console.log(`\nEleme verisi üretildi: ${excludedTotal} kayıt (3 dilim toplamı).`);
 
 // Detay paneli verisi: her sembol × zaman dilimi için ayrı JSON (bkz.
 // tasks/03-detail-drawer.md §A). İstek üzerine indirilecek şekilde tabloya

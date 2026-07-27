@@ -13,6 +13,7 @@ import NewsPanel from "./NewsPanel";
 import NewsList from "./NewsList";
 import WatchlistTab, { WatchlistEmptyState } from "./WatchlistTab";
 import ColumnMenu from "./ColumnMenu";
+import ExcludedListModal, { ExcludedCounterButton } from "./ExcludedList";
 import { formatLastUpdated, parseLenient } from "../lib/format";
 import { fetchNewsFeed } from "../lib/news";
 import { usePortfolio } from "../lib/portfolio";
@@ -175,6 +176,9 @@ export default function ScanScreen({ initialTf, initialData }: ScanScreenProps) 
   // yükseklik eşiği bu bayrağı tetikler.
   const [isShortMobile, setIsShortMobile] = useState(false);
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
+  // Elenen (taranamayan) hisseler listesi modalı (bkz. tasks/09-eleme-gorunurlugu.md §D)
+  // — `FilterSheet`/`DetailDrawer` ile AYNI "yalnızca açıkken mount et" deseni.
+  const [excludedListOpen, setExcludedListOpen] = useState(false);
   // Mobil kartlarda ilk 50, kaydırınca/"daha fazla göster"e basınca +50 (tasks/04 §E).
   const [visibleCount, setVisibleCount] = useState(MOBILE_PAGE_SIZE);
   // Mobil "Hisseler | Haberler | Takibim" sekmesi (bkz. tasks/05-kap-haberler.md §D,
@@ -572,39 +576,59 @@ export default function ScanScreen({ initialTf, initialData }: ScanScreenProps) 
                     HİÇ render edilmez — aşağıdaki ayrı satır (eski hâliyle
                     BİREBİR) onun yerine geçer, kabul kriteri 10 bu yüzden korunur. */}
                 {isShortMobile ? (
-                  <span
-                    style={{
-                      marginLeft: "auto",
-                      flex: "0 1 auto",
-                      minWidth: 0,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                      fontSize: 12.5,
-                      color: "var(--color-neutral-400)",
-                    }}
-                  >
+                  <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                    <span
+                      style={{
+                        flex: "0 1 auto",
+                        minWidth: 0,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                        fontSize: 12.5,
+                        color: "var(--color-neutral-400)",
+                      }}
+                    >
+                      <strong style={{ color: "var(--color-text)", fontVariantNumeric: "tabular-nums" }}>
+                        {sortedRows.length}
+                      </strong>{" "}
+                      / {allRows.length} hisse eşleşti
+                      {isLoading ? " · yükleniyor…" : ""}
+                      {fetchError ? ` · hata: ${fetchError}` : ""}
+                    </span>
+                    {/* Elenen sayacı (bkz. tasks/09-eleme-gorunurlugu.md §D) — kısa/yatay
+                        modda da AYNI satırda, kısaltılmış metinle (`compact`); düğme
+                        `.btn-lg` olduğu için satırın zaten Filtrele/Sırala'dan gelen
+                        ≥44px yüksekliğine sığar, ek yükseklik EKLEMEZ (bkz. o düğmelerin
+                        `.btn-lg`/`.sort-trigger` kuralları, app/globals.css). */}
+                    <ExcludedCounterButton
+                      tf={tf}
+                      scannedCount={current?.total ?? 0}
+                      onOpen={() => setExcludedListOpen(true)}
+                      compact
+                    />
+                  </div>
+                ) : null}
+              </div>
+              {!isShortMobile ? (
+                <div style={{ padding: "8px 14px 0", flex: "none", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <div style={{ fontSize: 12.5, color: "var(--color-neutral-400)", flex: "1 1 auto", minWidth: 0 }}>
                     <strong style={{ color: "var(--color-text)", fontVariantNumeric: "tabular-nums" }}>
                       {sortedRows.length}
                     </strong>{" "}
                     / {allRows.length} hisse eşleşti
                     {isLoading ? " · yükleniyor…" : ""}
                     {fetchError ? ` · hata: ${fetchError}` : ""}
-                  </span>
-                ) : null}
-              </div>
-              {!isShortMobile ? (
-                <div style={{ padding: "8px 14px 0", flex: "none", fontSize: 12.5, color: "var(--color-neutral-400)" }}>
-                  <strong style={{ color: "var(--color-text)", fontVariantNumeric: "tabular-nums" }}>
-                    {sortedRows.length}
-                  </strong>{" "}
-                  / {allRows.length} hisse eşleşti
-                  {isLoading ? " · yükleniyor…" : ""}
-                  {fetchError ? ` · hata: ${fetchError}` : ""}
+                  </div>
+                  <ExcludedCounterButton
+                    tf={tf}
+                    scannedCount={current?.total ?? 0}
+                    onOpen={() => setExcludedListOpen(true)}
+                    compact
+                  />
                 </div>
               ) : null}
               {sortedRows.length === 0 && !isLoading ? (
-                <EmptyState onReset={handleReset} />
+                <EmptyState onReset={handleReset} query={filters.q} tf={tf} onJumpToTf={setTf} />
               ) : (
                 <MobileList
                   rows={sortedRows}
@@ -645,6 +669,13 @@ export default function ScanScreen({ initialTf, initialData }: ScanScreenProps) 
                 {isLoading ? " · yükleniyor…" : ""}
                 {fetchError ? ` · hata: ${fetchError}` : ""}
               </span>
+              {/* Elenen sayacı — keşfedilebilir, tıklanınca liste açılır (bkz.
+                  tasks/09-eleme-gorunurlugu.md §D, components/ExcludedList.tsx). */}
+              <ExcludedCounterButton
+                tf={tf}
+                scannedCount={current?.total ?? 0}
+                onOpen={() => setExcludedListOpen(true)}
+              />
               {/* Kolon düzeni (tasks/06-takip-listesi-ve-kolonlar.md §B) — yalnızca
                   masaüstü, tablonun başlık çubuğunda ("başlık çubuğunda bir 'Kolonlar'
                   düğmesi", görev metni). `marginLeft:auto` bu tek öğeyi bar'ın SAĞ ucuna
@@ -683,7 +714,7 @@ export default function ScanScreen({ initialTf, initialData }: ScanScreenProps) 
                 watchlistOnly && watchlistSymbols.length === 0 ? (
                   <WatchlistEmptyState />
                 ) : (
-                  <EmptyState onReset={handleReset} />
+                  <EmptyState onReset={handleReset} query={filters.q} tf={tf} onJumpToTf={setTf} />
                 )
               ) : null}
             </div>
@@ -708,7 +739,15 @@ export default function ScanScreen({ initialTf, initialData }: ScanScreenProps) 
         />
       ) : null}
       {selectedSymbol ? (
-        <DetailDrawer symbol={selectedSymbol} tf={tf} onClose={() => setSelectedSymbol(null)} />
+        <DetailDrawer
+          symbol={selectedSymbol}
+          tf={tf}
+          onClose={() => setSelectedSymbol(null)}
+          onTimeframeChange={setTf}
+        />
+      ) : null}
+      {excludedListOpen ? (
+        <ExcludedListModal tf={tf} onClose={() => setExcludedListOpen(false)} />
       ) : null}
       {/* URL'de `?takip=` var VE localStorage doluyken sorulan üç seçenek (tasks/06-
           takip-listesi-ve-kolonlar.md §A "Mimari kısıt") — isMobile dalından BAĞIMSIZ

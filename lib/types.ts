@@ -64,6 +64,34 @@ export interface ScanApiResponse extends ScanResult {
 }
 
 /**
+ * Elenen (taranamayan) sembol sebep kodları — bkz. tasks/09-eleme-gorunurlugu.md §A.
+ * "az-bar" = bar sayısı `minBars`in altında, "veri-yok" = bu dilim için bar dosyası hiç
+ * yok (ya da okunamadı/bozuk — ayrı bir 5. kod YOK, en yakın karşılık bu), "hesap-hatasi"
+ * = motor (`indicators`/`scoreOf`) istisna attı veya fiyat/skor sonlu değil.
+ */
+export type ExcludedReason = "az-bar" | "veri-yok" | "hesap-hatasi";
+
+/**
+ * Bir zaman diliminde taranamayan (MIN_BARS eşiğini geçemeyen / verisi olmayan / motor
+ * hatası veren) sembol — `public/data/excluded-{tf}.json` içeriği (bkz. `lib/scan-data.ts`
+ * `getExcludedRows`, `scripts/build-static.ts`). EŞİK BURADA DEĞİŞMEZ — yalnızca elemeyi
+ * KAYDEDER (tasks/09 "Eşik DEĞİŞMEYECEK").
+ */
+export interface ExcludedEntry {
+  symbol: string;
+  name: string;
+  /** Bulunan bar sayısı ("veri-yok" için 0). */
+  bars: number;
+  /** Motorun istediği asgari bar sayısı — `src/engine/indicators.ts` `MIN_BARS`den taşınır, elle YAZILMAZ. */
+  minBars: number;
+  reason: ExcludedReason;
+  /** Bu dilimdeki en eski barın zamanı (epoch ms) — "ilk işlem" için yaklaşık değer; veri hiç yoksa `null`. */
+  firstBarAt: number | null;
+  /** Bu sembolün BAŞARIYLA tarandığı diğer zaman dilimleri (bu tf hariç) — "başka dilime geç" düğmesi için. */
+  availableIn: Timeframe[];
+}
+
+/**
  * Hisse detay paneli için tek sembol × zaman dilimi verisi — `public/data/detail/
  * {SEMBOL}-{tf}.json` içeriği (bkz. tasks/03-detail-drawer.md §A, `lib/detail.ts`).
  * Motorun `Indicators` + `Score` çıktısının, panelin ihtiyaç duyduğu alt kümesidir

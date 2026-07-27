@@ -29,9 +29,11 @@ import {
   formatRatio1,
   formatVolumeMn,
 } from "../lib/format";
+import { useExcludedEntry } from "../lib/excluded";
 import { fetchStockNews, formatNewsTime } from "../lib/news";
 import { importanceTagStyle } from "../lib/news-importance";
 import type { DetailData, NewsItem, ScoreComponent, Timeframe } from "../lib/types";
+import ExcludedNotice from "./ExcludedNotice";
 
 // bkz. components/ScanScreen.tsx — statik export'ta alt dizin (GitHub Pages) desteği
 // için aynı örüntü; derleme zamanında istemci paketine gömülür.
@@ -55,11 +57,20 @@ interface DetailDrawerProps {
   symbol: string;
   tf: Timeframe;
   onClose: () => void;
+  /** Panel içindeki "…'e geç" düğmesi (bkz. tasks/09-eleme-gorunurlugu.md §C) —
+   * ScanScreen'in `setTf`'iyle AYNI state, tablo/panel HER ZAMAN aynı dilimi gösterir. */
+  onTimeframeChange: (tf: Timeframe) => void;
 }
 
-export default function DetailDrawer({ symbol, tf, onClose }: DetailDrawerProps) {
+export default function DetailDrawer({ symbol, tf, onClose, onTimeframeChange }: DetailDrawerProps) {
   const [data, setData] = useState<DetailData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Zaman dilimi değişince (veya panel bu sembol için ilk açılınca) bu sembolün YENİ
+  // dilimde elenip elenmediği (bkz. tasks/09-eleme-gorunurlugu.md §C: "panel boş/bozuk
+  // görünmesin"). `detail/{symbol}-{tf}.json` 404 verirse (aşağıdaki fetch efekti)
+  // AYNI sebep bilgisiyle açıklama gösterilir — ayrı bir metin YAZILMAZ (ExcludedNotice,
+  // §B ile PAYLAŞILAN bileşen).
+  const { loading: excludedLoading, entry: excludedEntry } = useExcludedEntry(tf, symbol);
   // Şirket haberleri (bkz. tasks/05-kap-haberler.md §B — "EN ÖNEMLİ PARÇA"). `tf`den
   // BAĞIMSIZ ayrı bir efekt: haber, zaman dilimi değişince yeniden çekilmez, yalnızca
   // sembol değişince (panel açıldığında `${BASE_PATH}/data/news/{SEMBOL}.json`, bkz.
@@ -144,9 +155,21 @@ export default function DetailDrawer({ symbol, tf, onClose }: DetailDrawerProps)
           </div>
 
           {!data ? (
-            <div style={{ marginTop: 14, fontSize: 12.5, color: error ? COLOR_DOWN : "var(--color-neutral-400)" }}>
-              {error ? `Detay verisi alınamadı: ${error}` : "Yükleniyor…"}
-            </div>
+            error ? (
+              excludedLoading ? (
+                <div style={{ marginTop: 14, fontSize: 12.5, color: "var(--color-neutral-400)" }}>Yükleniyor…</div>
+              ) : excludedEntry ? (
+                <div style={{ marginTop: 14 }}>
+                  <ExcludedNotice entries={[excludedEntry]} onJumpToTf={onTimeframeChange} />
+                </div>
+              ) : (
+                <div style={{ marginTop: 14, fontSize: 12.5, color: COLOR_DOWN }}>
+                  Detay verisi alınamadı: {error}
+                </div>
+              )
+            ) : (
+              <div style={{ marginTop: 14, fontSize: 12.5, color: "var(--color-neutral-400)" }}>Yükleniyor…</div>
+            )
           ) : (
             <>
               <div style={{ display: "flex", alignItems: "center", gap: 14, rowGap: 8, marginTop: 10, flexWrap: "wrap" }}>

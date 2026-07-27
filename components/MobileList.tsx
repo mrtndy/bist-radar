@@ -40,6 +40,23 @@ interface MobileListProps {
     getMetrics: (row: RowData) => PositionMetrics | null;
     onEdit: (symbol: string) => void;
   };
+  /**
+   * Kart sütun sayısı (bkz. tasks/08-panel-gizleme-yatay-siralama.md §B "Ek
+   * iyileştirme") — yan çevrilmiş telefon gibi geniş-ama-kısa mobil viewport'larda
+   * (genişlik ≥600px) 2, dar dikey telefonda 1. Opsiyonel + varsayılan 1: bu prop'u
+   * geçirmeyen çağıranlar (ör. WatchlistTab.tsx — bu görevin izin verilen dosya
+   * listesinde değil) ESKİ tek sütun davranışını değişmeden korur.
+   */
+  columns?: 1 | 2;
+  /**
+   * Kısa viewport (yan çevrilmiş telefon, bkz. ScanScreen.tsx `isShortMobile`) —
+   * kapsayıcının kendi dolgusu/aralığı daralır ki ikinci sıra kartlar kaydırmadan
+   * önce en azından kısmen görünsün (ölçüldü: 812×375'te tek sıra bile tam
+   * sığmıyordu). Kartın KENDİ iç boşluğu `.mobile-card` CSS medya sorgusuyla ayrı
+   * daralır (bkz. app/globals.css — StockCard.tsx düzenlenemez). Opsiyonel +
+   * varsayılan `false`: WatchlistTab.tsx bu prop'u hiç geçirmez, ESKİ davranış korunur.
+   */
+  compact?: boolean;
 }
 
 export default function MobileList({
@@ -50,11 +67,14 @@ export default function MobileList({
   isWatched,
   onToggleWatch,
   portfolio,
+  columns = 1,
+  compact = false,
 }: MobileListProps) {
   const visible = rows.slice(0, visibleCount);
   const hasMore = visibleCount < rows.length;
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const sentinelRef = useRef<HTMLButtonElement | null>(null);
+  const isGrid = columns === 2;
 
   useEffect(() => {
     if (!hasMore) return;
@@ -78,10 +98,17 @@ export default function MobileList({
         flex: 1,
         minHeight: 0,
         overflowY: "auto",
-        padding: "10px 14px 18px",
-        display: "flex",
-        flexDirection: "column",
-        gap: 10,
+        padding: compact ? "4px 14px 8px" : "10px 14px 18px",
+        display: isGrid ? "grid" : "flex",
+        flexDirection: isGrid ? undefined : "column",
+        // minmax(0,1fr): düz "1fr" içerik genişliğine göre şişip sütunları eşitsiz
+        // bırakıyordu (ölçüldü: 504px / 538px). minmax(0,…) taşmayı engelleyip
+        // iki sütunu eşitler.
+        gridTemplateColumns: isGrid ? "minmax(0, 1fr) minmax(0, 1fr)" : undefined,
+        // Grid'de varsayılan `align-content` satırları kapsayıcının tüm yüksekliğine
+        // GERDİRİR (içerik kısaysa dahi) — kartlar üstte toplu kalsın diye "start".
+        alignContent: isGrid ? "start" : undefined,
+        gap: compact ? 4 : 10,
       }}
     >
       {visible.map((row) => (
@@ -103,7 +130,13 @@ export default function MobileList({
         />
       ))}
       {hasMore ? (
-        <button ref={sentinelRef} type="button" className="load-more-btn" onClick={onLoadMore}>
+        <button
+          ref={sentinelRef}
+          type="button"
+          className="load-more-btn"
+          style={isGrid ? { gridColumn: "1 / -1" } : undefined}
+          onClick={onLoadMore}
+        >
           Daha fazla göster ({rows.length - visibleCount} kaldı)
         </button>
       ) : null}

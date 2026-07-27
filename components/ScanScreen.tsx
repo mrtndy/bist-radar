@@ -18,6 +18,7 @@ import { fetchNewsFeed } from "../lib/news";
 import { usePortfolio } from "../lib/portfolio";
 import { useWatchlist } from "../lib/watchlist";
 import { COLUMN_LABELS, useColumnLayout } from "../lib/columns";
+import { SORT_NAMES } from "../lib/types";
 import type {
   FilterState,
   NewsItem,
@@ -29,12 +30,29 @@ import type {
   SortKey,
   Timeframe,
 } from "../lib/types";
+import { usePanelPrefs, useTabPrefs } from "../lib/view-prefs";
+import type { MobileTabId } from "../lib/view-prefs";
 
 const TF_LABEL: Record<Timeframe, string> = { G: "Günlük", H: "Haftalık", S: "Saatlik" };
 
-/** Kırılma noktası (bkz. tasks/04-mobil-gorunum.md §A): altı mobil kart listesi,
- * üstü/eşiti mevcut masaüstü tablo düzeni — masaüstü BİREBİR aynı kalır. */
+/**
+ * Kırılma noktası (bkz. tasks/08-panel-gizleme-yatay-siralama.md §B — HATA
+ * DÜZELTMESİ, ölçüldü 2026-07-27; önceki hâli tasks/04-mobil-gorunum.md §A):
+ * SADECE genişliğe bakmak yanlıştı — yan çevrilmiş telefon (812×375) genişlik
+ * eşiğini (720) geçtiği için masaüstü dalına düşüyordu, ama masaüstü tablosu
+ * (min-width 1060px) + sol filtre paneli (236px) 812px'e sığmıyor, üstelik 375px
+ * yükseklikte yalnızca ~5 satır görünüyordu ("masaüstü gibi" olmaya çalışıp
+ * kullanılamaz hâle geliyordu). Yükseklik de eşiğe eklendi: gerçek bir masaüstü
+ * penceresi nadiren 500px'den kısadır, yan çevrilmiş telefon HER ZAMAN kısadır —
+ * bkz. aşağıdaki `check()` efekti: `isMobile = width < 720 || height < 500`.
+ */
 const MOBILE_BREAKPOINT = 720;
+const MOBILE_MIN_HEIGHT = 500;
+
+/** Mobil düzendeyken bu genişliğe ULAŞAN (yatay telefon gibi geniş-ama-kısa)
+ * viewport'larda kart listesi tek sütun yerine iki sütunlu grid'e geçer (bkz.
+ * tasks/08 §B "Ek iyileştirme") — dar dikey telefonda (375px) tek sütun kalır. */
+const MOBILE_WIDE_MIN_WIDTH = 600;
 
 /** Mobil kartların bir kerede kaç tanesi render edilir / kaydırınca kaç tane daha
  * eklenir (bkz. tasks/04-mobil-gorunum.md §E — performans ZORUNLU). */
@@ -45,18 +63,13 @@ const MOBILE_PAGE_SIZE = 50;
 // geliştirmede boş string olur. Hem dev hem export'ta aynı statik JSON yolu kullanılır.
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
-const SORT_NAMES: Record<SortKey, string> = {
-  symbol: "sembol",
-  price: "fiyat",
-  chg: "değişim",
-  score: "skor",
-  k: "stokastik",
-  hist: "MACD",
-  rsi: "RSI",
-  atrPct: "ATR",
-  relVol: "relatif hacim",
-  pctB: "%B",
-  newsCount: "haber",
+/** Mobil "Hisseler | Haberler | Takibim" sekmelerinin görüntülenme sırası + etiketi
+ * (bkz. tasks/08 §A "Mobil", lib/view-prefs.ts `MobileTabId`). */
+const MOBILE_TAB_ORDER: MobileTabId[] = ["hisseler", "haberler", "takibim"];
+const MOBILE_TAB_LABELS: Record<MobileTabId, string> = {
+  hisseler: "Hisseler",
+  haberler: "Haberler",
+  takibim: "Takibim",
 };
 
 const DEFAULT_FILTERS: FilterState = {
@@ -146,14 +159,37 @@ export default function ScanScreen({ initialTf, initialData }: ScanScreenProps) 
   // güncellenir (Claude_Browser `resize_window` doğrulaması sayfayı yeniden
   // yüklemeden aynı sekmede boyut değiştirebiliyor).
   const [isMobile, setIsMobile] = useState(false);
+  // Yan çevrilmiş telefonda (genişlik≥600) kartlar iki sütunlu grid olsun diye (bkz.
+  // tasks/08 §B "Ek iyileştirme") — `isMobile` ile AYNI mount-sonrası desende, aynı
+  // efektte ölçülür (aşağıda). Sunucu/derleme zamanı tek değeri bilir (1) diye `false`
+  // yerine `1` ile başlar; masaüstü dalı bu değeri hiç okumaz, hidrasyon riski yok.
+  const [mobileColumns, setMobileColumns] = useState<1 | 2>(1);
+  // Yükseklik <500px olduğu İÇİN mobil olan durum (yan çevrilmiş telefon) — ölçüldü:
+  // 812×375'te sabit üst bar (121px) + gecikme şeridi + sekme çubuğu + Filtrele/Sırala
+  // satırı + "N/M hisse" sayaç satırı TOPLAMDA ~187px yer kaplıyor, karta yalnızca 67px
+  // kalıyor (bir kart 151px) — kart HİÇ tam görünmüyordu. Bu bayrak true iken (yalnızca
+  // kısa/yatay durumda) gecikme şeridi/sekme satırının dolgusu daralır ve Filtrele/Sırala
+  // satırıyla sayaç TEK satırda birleşir (bkz. aşağıdaki JSX + DelayStrip `compact` prop).
+  // `false` iken (375×812 DAHİL — 812≥500) hiçbir şey değişmez: kabul kriteri 10 ("dikey
+  // düzen bugünkü hâliyle aynı") bu yüzden otomatik korunur — genişlik değil, SADECE
+  // yükseklik eşiği bu bayrağı tetikler.
+  const [isShortMobile, setIsShortMobile] = useState(false);
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   // Mobil kartlarda ilk 50, kaydırınca/"daha fazla göster"e basınca +50 (tasks/04 §E).
   const [visibleCount, setVisibleCount] = useState(MOBILE_PAGE_SIZE);
   // Mobil "Hisseler | Haberler | Takibim" sekmesi (bkz. tasks/05-kap-haberler.md §D,
   // tasks/06-takip-listesi-ve-kolonlar.md §A). "hisseler" ile başlar: ilk render'da
   // haber/takip kartları hiç mount edilmez, bu da mobil DOM düğümü bütçesini (kabul
-  // kriteri 7, <2000) o listelerin boyutundan bağımsız kılar.
-  const [mobileTab, setMobileTab] = useState<"hisseler" | "haberler" | "takibim">("hisseler");
+  // kriteri 7, <2000) o listelerin boyutundan bağımsız kılar. Ayrıca "hisseler" ASLA
+  // gizlenemeyen tek sekme (bkz. lib/view-prefs.ts) — güvenli, her zaman geçerli bir
+  // varsayılan.
+  const [mobileTab, setMobileTab] = useState<MobileTabId>("hisseler");
+  // Panel (masaüstü) + sekme (mobil) görünürlük tercihleri (tasks/08 §A) —
+  // localStorage okuması hook İÇİNDE `isMobile` ile AYNI mount-sonrası desenle
+  // yapılır (bkz. lib/view-prefs.ts), burada yalnızca sonuç kullanılır/TopBar'a
+  // (Görünüm menüsü) ve FilterPanel/NewsPanel'e (rail düğmeleri) geçirilir.
+  const panelPrefs = usePanelPrefs();
+  const tabPrefs = useTabPrefs();
   // Piyasa geneli KAP haber akışı (bkz. tasks/05-kap-haberler.md §C/§D) — `tf`/filtreden
   // BAĞIMSIZ, tek seferlik fetch (ScanScreen'in tarama verisi fetch'iyle AYNI mimari:
   // konteyner fetch eder, NewsPanel/NewsList yalnızca gösterir). `null` = henüz
@@ -199,12 +235,35 @@ export default function ScanScreen({ initialTf, initialData }: ScanScreenProps) 
 
   useEffect(() => {
     function check() {
-      setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      // Bkz. dosya başı MOBILE_BREAKPOINT/MOBILE_MIN_HEIGHT yorumu (tasks/08 §B) —
+      // HATA DÜZELTMESİ: yalnızca genişlik değil, yükseklik de kontrol edilir.
+      setIsMobile(w < MOBILE_BREAKPOINT || h < MOBILE_MIN_HEIGHT);
+      setMobileColumns(w >= MOBILE_WIDE_MIN_WIDTH ? 2 : 1);
+      setIsShortMobile(h < MOBILE_MIN_HEIGHT);
     }
     check();
     window.addEventListener("resize", check);
-    return () => window.removeEventListener("resize", check);
+    // Bazı tarayıcılarda döndürmede `resize` geç/eksik tetikleniyor (görev §B) —
+    // `orientationchange` ek güvence olarak dinlenir.
+    window.addEventListener("orientationchange", check);
+    return () => {
+      window.removeEventListener("resize", check);
+      window.removeEventListener("orientationchange", check);
+    };
   }, []);
+
+  // Aktif mobil sekme "Görünüm" menüsünden gizlenirse Hisseler'e dön (görev §A
+  // "Mobil": "Gizli bir sekme aktifken gizlenirse, otomatik olarak Hisseler'e
+  // dönülsün"). `tabPrefs.hiddenTabs` mount sonrası (localStorage okunduktan sonra)
+  // değiştiğinde de çalışır — o an açık sekme zaten kalıcı olarak gizli bir sekmeyse
+  // aynı şekilde Hisseler'e düşer.
+  useEffect(() => {
+    if (mobileTab !== "hisseler" && tabPrefs.hiddenTabs.includes(mobileTab)) {
+      setMobileTab("hisseler");
+    }
+  }, [tabPrefs.hiddenTabs, mobileTab]);
 
   /**
    * Yayınlanmış veriyi yeniden çeker.
@@ -385,18 +444,6 @@ export default function ScanScreen({ initialTf, initialData }: ScanScreenProps) 
     }
   }
 
-  /**
-   * Mobil sıralama menüsünden seçim (bkz. components/SortMenu.tsx). `handleSort`'un
-   * "aynı kolona tekrar basınca yönü çevir" davranışını BİLEREK yeniden kullanmaz:
-   * menüdeki her seçenek kendi etiketinde yazan yönü (ör. "yüksek→düşük") her
-   * seferinde deterministik uygular — masaüstü `handleSort`/ScanTable başlık tıklaması
-   * bu fonksiyondan ETKİLENMEZ, ayrı kalır.
-   */
-  function handleSortMenuSelect(key: SortKey) {
-    setSortKey(key);
-    setSortDir(key === "symbol" ? 1 : -1);
-  }
-
   function handleFilterChange(patch: Partial<FilterState>) {
     setFilters((prev) => ({ ...prev, ...patch }));
   }
@@ -445,37 +492,33 @@ export default function ScanScreen({ initialTf, initialData }: ScanScreenProps) 
         onRefresh={() => void refresh()}
         refreshState={refreshState}
         isMobile={isMobile}
+        panelPrefs={panelPrefs}
+        tabPrefs={tabPrefs}
       />
       {isMobile ? (
         <div style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
-          <DelayStrip />
-          {/* Hisseler/Haberler sekmesi (bkz. tasks/05-kap-haberler.md §D) — sağ haber
-              paneli mobilde olmaz, yerine liste üstünde bir geçiş. Mevcut `.seg`/
-              `.seg-lg` sınıfları (TopBar'daki zaman dilimi kontrolüyle AYNI) yeniden
-              kullanılır — yeni CSS gerekmez, dokunma hedefi zaten ≥44px. */}
-          <div style={{ display: "flex", padding: "10px 14px 0", flex: "none" }}>
+          <DelayStrip compact={isShortMobile} />
+          {/* Hisseler/Haberler/Takibim sekmesi (bkz. tasks/05-kap-haberler.md §D,
+              tasks/06-takip-listesi-ve-kolonlar.md §A). Mevcut `.seg`/`.seg-lg`
+              sınıfları (TopBar'daki zaman dilimi kontrolüyle AYNI) yeniden kullanılır
+              — yeni CSS gerekmez, dokunma hedefi zaten ≥44px. Gizlenen sekmeler
+              (bkz. tasks/08 §A "Mobil", lib/view-prefs.ts) listeden düşer; Hisseler
+              `tabPrefs.hiddenTabs`e ASLA giremez (useTabPrefs.toggleTabHidden
+              korumasız da bırakılsa) bu yüzden filtre koşulsuz gösterilir.
+              Üst/alt dolgu `isShortMobile`te daralır (bkz. dosya başı yorumu) — dokunma
+              hedefi (.seg-lg, 44px) HİÇ küçülmez, yalnızca boşluk kısalır. */}
+          <div style={{ display: "flex", padding: isShortMobile ? "4px 14px 0" : "10px 14px 0", flex: "none" }}>
             <div className="seg seg-lg" style={{ flex: "none" }}>
-              <button
-                type="button"
-                className={`seg-btn${mobileTab === "hisseler" ? " active" : ""}`}
-                onClick={() => setMobileTab("hisseler")}
-              >
-                Hisseler
-              </button>
-              <button
-                type="button"
-                className={`seg-btn${mobileTab === "haberler" ? " active" : ""}`}
-                onClick={() => setMobileTab("haberler")}
-              >
-                Haberler
-              </button>
-              <button
-                type="button"
-                className={`seg-btn${mobileTab === "takibim" ? " active" : ""}`}
-                onClick={() => setMobileTab("takibim")}
-              >
-                Takibim
-              </button>
+              {MOBILE_TAB_ORDER.filter((id) => id === "hisseler" || !tabPrefs.hiddenTabs.includes(id)).map((id) => (
+                <button
+                  key={id}
+                  type="button"
+                  className={`seg-btn${mobileTab === id ? " active" : ""}`}
+                  onClick={() => setMobileTab(id)}
+                >
+                  {MOBILE_TAB_LABELS[id]}
+                </button>
+              ))}
             </div>
           </div>
           {mobileTab === "haberler" ? (
@@ -506,7 +549,7 @@ export default function ScanScreen({ initialTf, initialData }: ScanScreenProps) 
                   alignItems: "center",
                   justifyContent: "space-between",
                   gap: 8,
-                  padding: "10px 14px 0",
+                  padding: isShortMobile ? "4px 14px 0" : "10px 14px 0",
                   flex: "none",
                 }}
               >
@@ -520,16 +563,46 @@ export default function ScanScreen({ initialTf, initialData }: ScanScreenProps) 
                   Filtrele
                   {activeFilterCount > 0 ? <span className="filter-badge">{activeFilterCount}</span> : null}
                 </button>
-                <SortMenu sortKey={sortKey} onSelect={handleSortMenuSelect} />
+                <SortMenu sortKey={sortKey} sortDir={sortDir} onChangeKey={setSortKey} onChangeDir={setSortDir} />
+                {/* Yan çevrilmiş telefonda (isShortMobile) sayaç ayrı bir satır
+                    AÇMAZ — bkz. dosya başı `isShortMobile` yorumu (tasks/08 §B,
+                    yükseklik bütçesi: 375px'te bir satırın tamamı ~27px değerli).
+                    812px genişlikte iki düğmenin yanına rahatça sığar
+                    (ölçüldü). Dikey/normal mobilde (isShortMobile===false) bu dal
+                    HİÇ render edilmez — aşağıdaki ayrı satır (eski hâliyle
+                    BİREBİR) onun yerine geçer, kabul kriteri 10 bu yüzden korunur. */}
+                {isShortMobile ? (
+                  <span
+                    style={{
+                      marginLeft: "auto",
+                      flex: "0 1 auto",
+                      minWidth: 0,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                      fontSize: 12.5,
+                      color: "var(--color-neutral-400)",
+                    }}
+                  >
+                    <strong style={{ color: "var(--color-text)", fontVariantNumeric: "tabular-nums" }}>
+                      {sortedRows.length}
+                    </strong>{" "}
+                    / {allRows.length} hisse eşleşti
+                    {isLoading ? " · yükleniyor…" : ""}
+                    {fetchError ? ` · hata: ${fetchError}` : ""}
+                  </span>
+                ) : null}
               </div>
-              <div style={{ padding: "8px 14px 0", flex: "none", fontSize: 12.5, color: "var(--color-neutral-400)" }}>
-                <strong style={{ color: "var(--color-text)", fontVariantNumeric: "tabular-nums" }}>
-                  {sortedRows.length}
-                </strong>{" "}
-                / {allRows.length} hisse eşleşti
-                {isLoading ? " · yükleniyor…" : ""}
-                {fetchError ? ` · hata: ${fetchError}` : ""}
-              </div>
+              {!isShortMobile ? (
+                <div style={{ padding: "8px 14px 0", flex: "none", fontSize: 12.5, color: "var(--color-neutral-400)" }}>
+                  <strong style={{ color: "var(--color-text)", fontVariantNumeric: "tabular-nums" }}>
+                    {sortedRows.length}
+                  </strong>{" "}
+                  / {allRows.length} hisse eşleşti
+                  {isLoading ? " · yükleniyor…" : ""}
+                  {fetchError ? ` · hata: ${fetchError}` : ""}
+                </div>
+              ) : null}
               {sortedRows.length === 0 && !isLoading ? (
                 <EmptyState onReset={handleReset} />
               ) : (
@@ -540,6 +613,8 @@ export default function ScanScreen({ initialTf, initialData }: ScanScreenProps) 
                   onSelectSymbol={setSelectedSymbol}
                   isWatched={isWatched}
                   onToggleWatch={toggleWatch}
+                  columns={mobileColumns}
+                  compact={isShortMobile}
                 />
               )}
             </>
@@ -557,6 +632,8 @@ export default function ScanScreen({ initialTf, initialData }: ScanScreenProps) 
             watchlistSymbols={watchlistSymbols}
             watchlistOnly={watchlistOnly}
             onToggleWatchlistOnly={() => setWatchlistOnly((v) => !v)}
+            open={panelPrefs.filterOpen}
+            onToggleOpen={panelPrefs.toggleFilterOpen}
           />
           <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
             <div style={{ display: "flex", alignItems: "baseline", gap: 8, padding: "10px 16px 8px", flex: "none" }}>
@@ -611,7 +688,12 @@ export default function ScanScreen({ initialTf, initialData }: ScanScreenProps) 
               ) : null}
             </div>
           </div>
-          <NewsPanel items={newsFeed} onSelectSymbol={setSelectedSymbol} />
+          <NewsPanel
+            items={newsFeed}
+            onSelectSymbol={setSelectedSymbol}
+            open={panelPrefs.newsOpen}
+            onToggleOpen={panelPrefs.toggleNewsOpen}
+          />
         </div>
       )}
       {filterSheetOpen ? (
@@ -650,12 +732,28 @@ export default function ScanScreen({ initialTf, initialData }: ScanScreenProps) 
  * tutulmaz) — brief'in kendi ifadesiyle birebir aynı metin; DetailDrawer'daki
  * `DelayNotice` ile aynı "~15 dakika" gecikme gerçeğini anlatır (bkz. o dosyadaki
  * yorum), aynı ikon/vurgu düzenini kullanır.
+ *
+ * `compact` (bkz. tasks/08-panel-gizleme-yatay-siralama.md §B, ScanScreen'deki
+ * `isShortMobile` yorumu) — yan çevrilmiş telefonda dolgu/yazı biraz küçülür ki
+ * kart listesine daha çok yükseklik kalsın; METİN AYNI KALIR (uyarı hiçbir zaman
+ * kısaltılmaz/gizlenmez — "sürekli görünür" kısıtı). Normal mobilde (`compact`
+ * yok/false) ESKİ hâliyle birebir aynı — kabul kriteri 10.
  */
-function DelayStrip() {
+function DelayStrip({ compact = false }: { compact?: boolean }) {
   return (
-    <div className="delay-strip">
-      <Clock size={16} weight="bold" style={{ flex: "none", marginTop: 1, color: "var(--color-accent-200)" }} />
-      <span style={{ fontSize: 14, lineHeight: 1.45, color: "var(--color-neutral-200)" }}>
+    <div className="delay-strip" style={compact ? { margin: "4px 14px 0", padding: "4px 8px", gap: 5 } : undefined}>
+      <Clock
+        size={compact ? 12 : 16}
+        weight="bold"
+        style={{ flex: "none", marginTop: 1, color: "var(--color-accent-200)" }}
+      />
+      {/*
+        Yatay ekranda (compact) yalnızca dolgu/satır aralığı daralır, PUNTO DARALMAZ.
+        Bu, kullanıcıyı emir vermeden önce aracı kurumundaki canlı fiyata bakmaya
+        yönlendiren güvenlik uyarısı; bir kart daha sığsın diye küçültülmez.
+        Kullanıcı yaşlıca ve bu metni okuması gerekiyor.
+      */}
+      <span style={{ fontSize: 14, lineHeight: compact ? 1.3 : 1.45, color: "var(--color-neutral-200)" }}>
         Veriler ~15 dakika gecikmelidir. Emir vermeden önce aracı kurumunuzdaki canlı fiyata bakın.
       </span>
     </div>

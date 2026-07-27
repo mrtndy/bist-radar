@@ -4,6 +4,8 @@ import { ArrowsClockwise, MagnifyingGlass } from "@phosphor-icons/react";
 import { formatInt } from "../lib/format";
 import { COLOR_DOWN, COLOR_UP } from "../lib/colors";
 import type { RefreshState, Timeframe } from "../lib/types";
+import ViewMenu from "./ViewMenu";
+import type { UsePanelPrefsResult, UseTabPrefsResult } from "../lib/view-prefs";
 
 /**
  * Düğme metni duruma göre değişir. Sadece ikon kullanmıyoruz: bu aracı borsa
@@ -42,11 +44,21 @@ interface TopBarProps {
   onRefresh: () => void;
   refreshState: RefreshState;
   /**
-   * < 720px mobil düzen mi (bkz. tasks/04-mobil-gorunum.md §A, §F). `false` iken bu
-   * bileşen ESKİ JSX'iyle (aşağıdaki `if (!isMobile)` dalı) birebir aynıdır — kabul
-   * kriteri 11 bunu gerektiriyor, o yüzden o dal hiç dokunulmadan bırakıldı.
+   * Genişlik < 720px VEYA yükseklik < 500px mobil düzen mi (bkz.
+   * tasks/08-panel-gizleme-yatay-siralama.md §B, önceki hâli tasks/04-mobil-gorunum.md
+   * §A, §F). `false` iken bu bileşen ESKİ JSX'iyle (aşağıdaki `if (!isMobile)` dalı)
+   * birebir aynıdır — kabul kriteri 9 bunu gerektiriyor, o yüzden o dal hiç
+   * dokunulmadan bırakıldı (yalnızca ViewMenu EKLENDİ, bkz. aşağı).
    */
   isMobile: boolean;
+  /**
+   * "Görünüm" menüsü — masaüstü panel + mobil sekme tercihleri (bkz.
+   * tasks/08-panel-gizleme-yatay-siralama.md §A, lib/view-prefs.ts). TopBar HER İKİ
+   * demeti de alır, kendi dalına uygun olanı ViewMenu'ye geçirir — iki dal da bu
+   * bileşeni "aynı yerden" barındırır (görev metni "tek Görünüm menüsü").
+   */
+  panelPrefs: UsePanelPrefsResult;
+  tabPrefs: UseTabPrefsResult;
 }
 
 export default function TopBar({
@@ -61,6 +73,8 @@ export default function TopBar({
   onRefresh,
   refreshState,
   isMobile,
+  panelPrefs,
+  tabPrefs,
 }: TopBarProps) {
   if (isMobile) {
     return (
@@ -72,6 +86,7 @@ export default function TopBar({
         lastUpdatedLabel={lastUpdatedLabel}
         onRefresh={onRefresh}
         refreshState={refreshState}
+        tabPrefs={tabPrefs}
       />
     );
   }
@@ -178,6 +193,14 @@ export default function TopBar({
           {lastUpdatedLabel ? `Veri: ${lastUpdatedLabel}` : "Veri: —"}
         </span>
 
+        <ViewMenu
+          mode="desktop"
+          filterOpen={panelPrefs.filterOpen}
+          newsOpen={panelPrefs.newsOpen}
+          onToggleFilterOpen={panelPrefs.toggleFilterOpen}
+          onToggleNewsOpen={panelPrefs.toggleNewsOpen}
+        />
+
         <button
           type="button"
           className="btn btn-secondary"
@@ -230,6 +253,8 @@ interface MobileTopBarProps {
   lastUpdatedLabel: string | null;
   onRefresh: () => void;
   refreshState: RefreshState;
+  /** "Görünüm" menüsü (tasks/08-panel-gizleme-yatay-siralama.md §A "Mobil") — bkz. TopBarProps yorumu. */
+  tabPrefs: UseTabPrefsResult;
 }
 
 function MobileTopBar({
@@ -240,6 +265,7 @@ function MobileTopBar({
   lastUpdatedLabel,
   onRefresh,
   refreshState,
+  tabPrefs,
 }: MobileTopBarProps) {
   return (
     <div className="mobile-topbar">
@@ -283,6 +309,7 @@ function MobileTopBar({
         >
           {lastUpdatedLabel ? `Veri: ${lastUpdatedLabel}` : "Veri: —"}
         </span>
+        <ViewMenu mode="mobile" hiddenTabs={tabPrefs.hiddenTabs} onToggleTab={tabPrefs.toggleTabHidden} />
         <button
           type="button"
           className="btn btn-secondary btn-lg"

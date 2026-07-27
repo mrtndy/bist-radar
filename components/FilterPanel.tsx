@@ -1,6 +1,15 @@
 "use client";
 
-import { Star } from "@phosphor-icons/react";
+/**
+ * Masaüstü sol filtre paneli. Katlanabilirlik (bkz.
+ * tasks/08-panel-gizleme-yatay-siralama.md §A "Masaüstü") `components/NewsPanel.tsx`
+ * ile AYNI görsel kalıbı izler: kapanınca 44px'lik dar bir "rail"e döner, tekrar
+ * açmak için üzerindeki huni ikonuna basılır. Aç/kapa durumu (`open`/`onToggleOpen`)
+ * ScanScreen'de tutulur (bkz. lib/view-prefs.ts `usePanelPrefs`) — hem bu panelin
+ * kendi rail düğmesinden hem TopBar'daki "Görünüm" menüsünden AYNI localStorage'a
+ * (`bist-radar:paneller`) yazılıp okunsun diye.
+ */
+import { FunnelSimple, Star, X } from "@phosphor-icons/react";
 import type { FilterState, SignalFilter } from "../lib/types";
 import { ShareWatchlistButton } from "./WatchlistTab";
 
@@ -44,6 +53,9 @@ interface FilterPanelProps {
   watchlistSymbols: string[];
   watchlistOnly: boolean;
   onToggleWatchlistOnly: () => void;
+  /** Katlanabilirlik (tasks/08 §A "Masaüstü") — bkz. dosya başı yorumu. */
+  open: boolean;
+  onToggleOpen: () => void;
 }
 
 export default function FilterPanel({
@@ -56,7 +68,37 @@ export default function FilterPanel({
   watchlistSymbols,
   watchlistOnly,
   onToggleWatchlistOnly,
+  open,
+  onToggleOpen,
 }: FilterPanelProps) {
+  if (!open) {
+    return (
+      <div
+        style={{
+          width: 44,
+          flex: "none",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          paddingTop: 10,
+          borderRight: "1px solid transparent",
+          borderImage:
+            "linear-gradient(180deg, transparent, var(--color-neutral-800) 48px, var(--color-neutral-800) calc(100% - 48px), transparent) 1",
+        }}
+      >
+        <button
+          type="button"
+          className="btn btn-icon"
+          onClick={onToggleOpen}
+          title="Filtre panelini göster"
+          aria-label="Filtre panelini göster"
+        >
+          <FunnelSimple size={18} weight="bold" />
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div
       style={{
@@ -72,6 +114,22 @@ export default function FilterPanel({
           "linear-gradient(180deg, transparent, var(--color-neutral-800) 48px, var(--color-neutral-800) calc(100% - 48px), transparent) 1",
       }}
     >
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ fontFamily: "var(--font-heading)", fontSize: 13.5, fontWeight: 500, flex: "1 1 auto" }}>
+          Filtreler
+        </span>
+        <button
+          type="button"
+          className="btn btn-icon"
+          style={{ width: 30, height: 30 }}
+          onClick={onToggleOpen}
+          title="Paneli kapat"
+          aria-label="Paneli kapat"
+        >
+          <X size={15} weight="bold" />
+        </button>
+      </div>
+
       <div>
         <div style={groupLabelStyle}>Sinyal</div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>

@@ -6,11 +6,13 @@
  * prop olarak gelir (tarama verisiyle AYNI mimari: konteyner fetch eder, sunum
  * bileşenleri yalnızca gösterir — bkz. ScanTable/MobileList'in `rows` prop'u).
  *
- * "Kapatılabilir" (§C) için üst barda ayrı bir düğme YOK (TopBar.tsx bu görevin
- * DÜZENLE listesinde değil) — panel kendi aç/kapa durumunu kendi içinde tutar: kapanınca
+ * Aç/kapa DURUMU artık ScanScreen'de tutulur (bkz. lib/view-prefs.ts
+ * `usePanelPrefs`, tasks/08-panel-gizleme-yatay-siralama.md §A) — bu bileşen SALT
+ * kontrollü hâle geldi (`open`/`onToggleOpen` prop'ları): hem kendi rail
+ * düğmesinden hem de TopBar'daki "Görünüm" menüsünden AYNI localStorage'a
+ * (`bist-radar:paneller`) yazılıp okunsun diye. Görsel kalıp DEĞİŞMEDİ: kapanınca
  * 44px'lik dar bir "rail"e döner, tekrar açmak için üzerindeki gazete ikonuna basılır.
  */
-import { useState } from "react";
 import { Newspaper, X } from "@phosphor-icons/react";
 import NewsList from "./NewsList";
 import type { NewsItem } from "../lib/types";
@@ -18,11 +20,11 @@ import type { NewsItem } from "../lib/types";
 interface NewsPanelProps {
   items: NewsItem[] | null;
   onSelectSymbol: (symbol: string) => void;
+  open: boolean;
+  onToggleOpen: () => void;
 }
 
-export default function NewsPanel({ items, onSelectSymbol }: NewsPanelProps) {
-  const [open, setOpen] = useState(true);
-
+export default function NewsPanel({ items, onSelectSymbol, open, onToggleOpen }: NewsPanelProps) {
   if (!open) {
     return (
       <div
@@ -41,7 +43,7 @@ export default function NewsPanel({ items, onSelectSymbol }: NewsPanelProps) {
         <button
           type="button"
           className="btn btn-icon"
-          onClick={() => setOpen(true)}
+          onClick={onToggleOpen}
           title="Piyasa akışını göster"
           aria-label="Piyasa akışını göster"
         >
@@ -74,7 +76,7 @@ export default function NewsPanel({ items, onSelectSymbol }: NewsPanelProps) {
           type="button"
           className="btn btn-icon"
           style={{ width: 30, height: 30 }}
-          onClick={() => setOpen(false)}
+          onClick={onToggleOpen}
           title="Paneli kapat"
           aria-label="Paneli kapat"
         >

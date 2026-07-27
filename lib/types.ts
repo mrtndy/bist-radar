@@ -138,6 +138,26 @@ export type SortKey =
 export type SortDir = 1 | -1;
 
 /**
+ * Türkçe alan adları — masaüstü alt başlığı ("sıralama: skor (azalan)", bkz.
+ * ScanScreen.tsx `sortLabel`) VE mobil sıralama menüsü (bkz. components/SortMenu.tsx,
+ * tasks/08-panel-gizleme-yatay-siralama.md §C) AYNI kaynaktan okur — iki yerde
+ * birbirinden bağımsız Türkçe metin tutulmasın diye burada, `SortKey`in yanında.
+ */
+export const SORT_NAMES: Record<SortKey, string> = {
+  symbol: "sembol",
+  price: "fiyat",
+  chg: "değişim",
+  score: "skor",
+  k: "stokastik",
+  hist: "MACD",
+  rsi: "RSI",
+  atrPct: "ATR",
+  relVol: "relatif hacim",
+  pctB: "%B",
+  newsCount: "haber",
+};
+
+/**
  * "Güncelle" düğmesinin durumu.
  * `updated` = sunucudan daha yeni veri geldi · `current` = zaten en günceldi.
  * İkisini ayırmak önemli: kullanıcı basıp hiçbir şey olmadığını sanmasın.

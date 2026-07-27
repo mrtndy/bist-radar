@@ -462,6 +462,17 @@ button {
   border-bottom: 1px solid transparent;
   border-image: linear-gradient(90deg, transparent, var(--color-neutral-700) 24px, var(--color-neutral-700) calc(100% - 24px), transparent) 1;
 }
+/* Kısa viewport'ta (yan çevrilmiş telefon — bkz.
+   tasks/08-panel-gizleme-yatay-siralama.md §B) dolgu/aralık daralır; satır İÇİNDEKİ
+   44px dokunma hedefleri (seg-lg/input-lg/btn-lg) DEĞİŞMEZ, yalnızca boşluk kısalır.
+   `.mobile-card` medya sorgusuyla AYNI 499px eşiği (JS `MOBILE_MIN_HEIGHT`=500 ile
+   senkron) — TopBar.tsx'e yeni bir prop eklemeden salt CSS ile yapılıyor. */
+@media (max-height: 499px) {
+  .mobile-topbar {
+    gap: 4px;
+    padding: 6px 14px;
+  }
+}
 
 /* — gecikme şeridi (sürekli görünür, kapatılamaz) — */
 .delay-strip {
@@ -499,6 +510,22 @@ button {
 .mobile-card:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
+}
+/* Kısa viewport'ta (yan çevrilmiş telefon — bkz.
+   tasks/08-panel-gizleme-yatay-siralama.md §B, ScanScreen.tsx `isShortMobile` /
+   `MOBILE_MIN_HEIGHT`) kart iç boşluğu daralır ki ikinci sıra kartlar kaydırmadan
+   önce en azından kısmen görünsün (ölçüldü: 375px yükseklikte tek satır bile
+   sığmıyordu). `StockCard.tsx` bu görevin İZİN VERİLEN dosya listesinde DEĞİL —
+   bu yüzden değişiklik SALT bu CSS sınıfı üzerinden yapılır (StockCard yalnızca
+   `className="mobile-card"` kullanır, iç satırların kendi dolgusu/hizası inline
+   style'larla sabit kalır, HİÇ dokunulmadı). Eşik (499px) JS tarafındaki
+   `MOBILE_MIN_HEIGHT` (h<500) ile AYNI — dikey/normal mobilde (yükseklik≥500,
+   375×812 DAHİL) bu blok hiç devreye girmez, kabul kriteri 10 korunur. */
+@media (max-height: 499px) {
+  .mobile-card {
+    padding: 8px 12px;
+    gap: 4px;
+  }
 }
 
 /* — "daha fazla göster" düğmesi / kaydırma nöbetçisi (aynı öğe ikisi de) — */

@@ -1,9 +1,28 @@
 "use client";
 
-import { MagnifyingGlass } from "@phosphor-icons/react";
+import { ArrowsClockwise, MagnifyingGlass } from "@phosphor-icons/react";
 import { formatInt } from "../lib/format";
 import { COLOR_DOWN, COLOR_UP } from "../lib/colors";
-import type { Timeframe } from "../lib/types";
+import type { RefreshState, Timeframe } from "../lib/types";
+
+/**
+ * Düğme metni duruma göre değişir. Sadece ikon kullanmıyoruz: bu aracı borsa
+ * terminolojisine hâkim olmayan biri kullanacak ve basınca ne olduğunu görmesi gerekiyor —
+ * "hiçbir şey olmadı" izlenimi en kötü sonuç.
+ */
+const REFRESH_LABEL: Record<RefreshState, string> = {
+  idle: "Güncelle",
+  loading: "Güncelleniyor…",
+  updated: "Güncellendi",
+  current: "Zaten güncel",
+  error: "Güncellenemedi",
+};
+
+function refreshColor(s: RefreshState): string | undefined {
+  if (s === "updated") return COLOR_UP;
+  if (s === "error") return COLOR_DOWN;
+  return undefined;
+}
 
 const TF_OPTIONS: { value: Timeframe; label: string }[] = [
   { value: "G", label: "Günlük" },
@@ -20,6 +39,8 @@ interface TopBarProps {
   upCount: number;
   downCount: number;
   lastUpdatedLabel: string | null;
+  onRefresh: () => void;
+  refreshState: RefreshState;
 }
 
 export default function TopBar({
@@ -31,6 +52,8 @@ export default function TopBar({
   upCount,
   downCount,
   lastUpdatedLabel,
+  onRefresh,
+  refreshState,
 }: TopBarProps) {
   return (
     <header
@@ -131,8 +154,37 @@ export default function TopBar({
             textOverflow: "ellipsis",
           }}
         >
-          {lastUpdatedLabel ? `Son: ${lastUpdatedLabel}` : "Son: —"}
+          {lastUpdatedLabel ? `Veri: ${lastUpdatedLabel}` : "Veri: —"}
         </span>
+
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={onRefresh}
+          disabled={refreshState === "loading"}
+          aria-live="polite"
+          title="Yayınlanmış en son veriyi yeniden yükler. Yeni piyasa verisi çekmez — o, gün sonu otomatik güncellemesiyle gelir."
+          style={{
+            flex: "none",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            minHeight: 32,
+            fontSize: 12,
+            color: refreshColor(refreshState),
+            borderColor: refreshColor(refreshState),
+          }}
+        >
+          <ArrowsClockwise
+            size={14}
+            style={
+              refreshState === "loading"
+                ? { animation: "omSpin 900ms linear infinite" }
+                : undefined
+            }
+          />
+          {REFRESH_LABEL[refreshState]}
+        </button>
       </div>
     </header>
   );

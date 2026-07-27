@@ -6,7 +6,7 @@ import FilterPanel from "./FilterPanel";
 import ScanTable, { EmptyState } from "./ScanTable";
 import DetailDrawer from "./DetailDrawer";
 import { formatLastUpdated, parseLenient } from "../lib/format";
-import type { FilterState, RowData, ScanApiResponse, ScanResult, SortDir, SortKey, Timeframe } from "../lib/types";
+import type { FilterState, RefreshState, RowData, ScanApiResponse, ScanResult, SortDir, SortKey, Timeframe } from "../lib/types";
 
 const TF_LABEL: Record<Timeframe, string> = { G: "Günlük", H: "Haftalık", S: "Saatlik" };
 
@@ -86,6 +86,53 @@ export default function ScanScreen({ initialTf, initialData }: ScanScreenProps) 
   // (bkz. DetailDrawer'daki [symbol, tf] bağımlı efekt) — böylece tablo ve detay aynı
   // anda o dilimin verisine geçer (README "Interactions & Behavior").
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
+  const [refreshState, setRefreshState] = useState<RefreshState>("idle");
+
+  /**
+   * Yayınlanmış veriyi yeniden çeker.
+   *
+   * Neyi tazeler, neyi tazelemez: bu, GitHub Actions'ın en son YAYINLADIĞI veriyi getirir.
+   * "Şimdi git yeni piyasa verisi çek" demek DEĞİLDİR — o iş akışını tetiklemek gerekir ve
+   * bu site public olduğu için sayfaya token gömülemez. Veri iş akışı çalıştıkça tazelenir.
+   *
+   * `cache: "no-cache"` şart: GitHub Pages JSON'lara `max-age=600` koyuyor (ölçüldü), yani
+   * düz bir fetch 10 dakika boyunca ağa hiç çıkmadan eski kopyayı döndürebilir. no-cache
+   * doğrulamayı zorlar ama ETag sayesinde veri değişmediyse 304 döner — bedava.
+   */
+  const refresh = async () => {
+    if (refreshState === "loading") return;
+    setRefreshState("loading");
+    const before = dataByTf[tf]?.fetchedAt ?? null;
+    try {
+      const res = await fetch(`${BASE_PATH}/data/scan-${tf}.json`, { cache: "no-cache" });
+      if (!res.ok) throw new Error(`İstek başarısız (${res.status})`);
+      const json = (await res.json()) as ScanApiResponse;
+      setDataByTf((prev) => ({ ...prev, [tf]: json }));
+      setFetchError(null);
+      setRefreshState(json.fetchedAt !== before ? "updated" : "current");
+    } catch (err) {
+      setFetchError(err instanceof Error ? err.message : "Tarama verisi alınamadı.");
+      setRefreshState("error");
+    }
+  };
+
+  // Geri bildirimi birkaç saniye sonra sıfırla ki buton kalıcı olarak "Güncellendi" demesin.
+  useEffect(() => {
+    if (refreshState === "idle" || refreshState === "loading") return;
+    const t = setTimeout(() => setRefreshState("idle"), 4000);
+    return () => clearTimeout(t);
+  }, [refreshState]);
+
+  // Sekmeye geri dönünce sessizce kontrol et — sayfa gün boyu açık kalırsa kullanıcının
+  // elle basması gerekmesin. Sekme gizliyken poll ETMİYORUZ (telefonda pil/veri).
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void refresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tf, dataByTf]);
 
   useEffect(() => {
     if (dataByTf[tf]) return;
@@ -199,6 +246,8 @@ export default function ScanScreen({ initialTf, initialData }: ScanScreenProps) 
         upCount={upCount}
         downCount={downCount}
         lastUpdatedLabel={lastUpdatedLabel}
+        onRefresh={() => void refresh()}
+        refreshState={refreshState}
       />
       <div style={{ display: "flex", minHeight: 0 }}>
         <FilterPanel

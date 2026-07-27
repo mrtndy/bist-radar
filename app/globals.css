@@ -337,3 +337,12 @@ button {
 .btn-icon:active {
   background: color-mix(in srgb, var(--color-text) 14%, transparent);
 }
+
+/* "Güncelle" düğmesindeki dönen ikon. Hareket hassasiyeti olan kullanıcılarda kapanır. */
+@keyframes omSpin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  [style*="omSpin"] { animation: none !important; }
+}

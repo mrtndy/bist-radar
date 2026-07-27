@@ -112,3 +112,10 @@ export type SortKey =
   | "pctB";
 
 export type SortDir = 1 | -1;
+
+/**
+ * "Güncelle" düğmesinin durumu.
+ * `updated` = sunucudan daha yeni veri geldi · `current` = zaten en günceldi.
+ * İkisini ayırmak önemli: kullanıcı basıp hiçbir şey olmadığını sanmasın.
+ */
+export type RefreshState = "idle" | "loading" | "updated" | "current" | "error";

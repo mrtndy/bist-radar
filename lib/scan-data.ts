@@ -1,6 +1,8 @@
 /**
- * Sunucu tarafı veri katmanı — SADECE Server Component / Route Handler içinden
- * içe aktarılmalı ("use client" bileşenlerinden DEĞİL): `node:fs` kullanır.
+ * Sunucu tarafı veri katmanı — SADECE Server Component / Route Handler / plain
+ * Node script içinden içe aktarılmalı ("use client" bileşenlerinden DEĞİL):
+ * `node:fs` kullanır. Kullananlar: `app/page.tsx` (ilk G verisini gömmek için)
+ * ve `scripts/build-static.ts` (statik `public/data/scan-*.json` üretimi için).
  *
  * `scripts/scan.ts` ile aynı mantık (barları oku -> motoru çağır -> satır üret),
  * farkı: süreç içi önbellek + zaman dilimi başına barların mtime imzasıyla

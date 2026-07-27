@@ -9,6 +9,11 @@ import type { FilterState, RowData, ScanApiResponse, ScanResult, SortDir, SortKe
 
 const TF_LABEL: Record<Timeframe, string> = { G: "Günlük", H: "Haftalık", S: "Saatlik" };
 
+// GitHub Pages gibi alt dizinde servis eden statik host'lar için (next.config.ts'teki
+// basePath ile aynı değer) — derleme zamanında istemci paketine gömülür, yerel
+// geliştirmede boş string olur. Hem dev hem export'ta aynı statik JSON yolu kullanılır.
+const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+
 const SORT_NAMES: Record<SortKey, string> = {
   symbol: "sembol",
   price: "fiyat",
@@ -80,7 +85,7 @@ export default function ScanScreen({ initialTf, initialData }: ScanScreenProps) 
     if (dataByTf[tf]) return;
     let cancelled = false;
     setLoadingTf(tf);
-    fetch(`/api/scan?tf=${tf}`)
+    fetch(`${BASE_PATH}/data/scan-${tf}.json`)
       .then((res) => {
         if (!res.ok) throw new Error(`İstek başarısız (${res.status})`);
         return res.json() as Promise<ScanApiResponse>;

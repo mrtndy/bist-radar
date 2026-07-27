@@ -9,3 +9,7 @@ __pycache__/
 out/
 next-env.d.ts
 *.tsbuildinfo
+
+# Statik tarama verisi — derleme zamanında scripts/build-static.ts tarafından
+# üretilir (npm run build:data), türetilmiş veridir, repoya girmemeli.
+public/data/

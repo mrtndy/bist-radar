@@ -18,6 +18,7 @@ import type { RowData, ScanResult } from "./types";
 
 const ROOT = process.cwd();
 const DATA_DIR = path.join(ROOT, "data");
+const NEWS_COUNTS_PATH = path.join(ROOT, "public", "data", "news", "_counts.json");
 
 interface CacheEntry {
   fingerprint: string;
@@ -28,6 +29,7 @@ interface CacheEntry {
 const scanCache = new Map<Timeframe, CacheEntry>();
 let universePromise: Promise<UniverseEntry[]> | null = null;
 let sectorsPromise: Promise<string[]> | null = null;
+let newsCountsPromise: Promise<Record<string, number>> | null = null;
 
 function getUniverse(): Promise<UniverseEntry[]> {
   if (!universePromise) {
@@ -46,6 +48,25 @@ function getSectorList(): Promise<string[]> {
     });
   }
   return sectorsPromise;
+}
+
+/**
+ * HABER kolonu için sembol -> son 7 gündeki KAP bildirim sayısı (bkz.
+ * tasks/05-kap-haberler.md §C). `scripts/build-news.ts` üretir
+ * (`public/data/news/_counts.json`); o script henüz hiç çalışmadıysa (ör. yerel
+ * geliştirmede `build:news` atlanmışsa) dosya yoktur ve burada BOŞ MAP'e düşülür —
+ * derleme bu yüzden hiçbir zaman bozulmaz, kolon yalnızca 0 gösterir. İki üretim
+ * script'i (`build:news`, `build:data`) arasında sıra bağımlılığı YOKTUR: hangisi
+ * önce çalışırsa çalışsın derleme başarılı olur, yalnızca `build:news` HENÜZ
+ * çalışmamışsa sayaçlar bir sonraki derlemeye kadar 0 kalır.
+ */
+function getNewsCounts(): Promise<Record<string, number>> {
+  if (!newsCountsPromise) {
+    newsCountsPromise = readFile(NEWS_COUNTS_PATH, "utf8")
+      .then((raw) => JSON.parse(raw) as Record<string, number>)
+      .catch(() => ({}));
+  }
+  return newsCountsPromise;
 }
 
 /**
@@ -88,6 +109,7 @@ async function readFetchedAt(tf: Timeframe): Promise<number | null> {
 async function computeRows(tf: Timeframe, barDir: string, files: string[]): Promise<RowData[]> {
   const universe = await getUniverse();
   const meta = new Map(universe.map((u) => [u.symbol, u]));
+  const newsCounts = await getNewsCounts();
   const rows: RowData[] = [];
 
   for (const f of files) {
@@ -124,6 +146,7 @@ async function computeRows(tf: Timeframe, barDir: string, files: string[]): Prom
         histPct: (ind.hist / ind.price) * 100,
         volTL: ind.volTL,
         topReason: topReasonOf(breakdown),
+        newsCount: newsCounts[symbol] ?? 0,
       });
     } catch {
       // Motor hatası (ör. dejenere seri) — bu sembolü atla, taramanın kalanını etkilemesin.

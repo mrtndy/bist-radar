@@ -9,8 +9,21 @@ import MobileList from "./MobileList";
 import FilterSheet from "./FilterSheet";
 import SortMenu from "./SortMenu";
 import DetailDrawer from "./DetailDrawer";
+import NewsPanel from "./NewsPanel";
+import NewsList from "./NewsList";
 import { formatLastUpdated, parseLenient } from "../lib/format";
-import type { FilterState, RefreshState, RowData, ScanApiResponse, ScanResult, SortDir, SortKey, Timeframe } from "../lib/types";
+import { fetchNewsFeed } from "../lib/news";
+import type {
+  FilterState,
+  NewsItem,
+  RefreshState,
+  RowData,
+  ScanApiResponse,
+  ScanResult,
+  SortDir,
+  SortKey,
+  Timeframe,
+} from "../lib/types";
 
 const TF_LABEL: Record<Timeframe, string> = { G: "Günlük", H: "Haftalık", S: "Saatlik" };
 
@@ -38,6 +51,7 @@ const SORT_NAMES: Record<SortKey, string> = {
   atrPct: "ATR",
   relVol: "relatif hacim",
   pctB: "%B",
+  newsCount: "haber",
 };
 
 const DEFAULT_FILTERS: FilterState = {
@@ -74,6 +88,8 @@ function getSortValue(row: RowData, key: SortKey): number {
       return row.relVol;
     case "pctB":
       return row.pctB;
+    case "newsCount":
+      return row.newsCount;
     default:
       return 0;
   }
@@ -112,6 +128,27 @@ export default function ScanScreen({ initialTf, initialData }: ScanScreenProps) 
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   // Mobil kartlarda ilk 50, kaydırınca/"daha fazla göster"e basınca +50 (tasks/04 §E).
   const [visibleCount, setVisibleCount] = useState(MOBILE_PAGE_SIZE);
+  // Mobil "Hisseler | Haberler" sekmesi (bkz. tasks/05-kap-haberler.md §D). "hisseler"
+  // ile başlar: ilk render'da haber kartları hiç mount edilmez, bu da mobil DOM düğümü
+  // bütçesini (kabul kriteri 7, <2000) haber listesinin boyutundan bağımsız kılar.
+  const [mobileTab, setMobileTab] = useState<"hisseler" | "haberler">("hisseler");
+  // Piyasa geneli KAP haber akışı (bkz. tasks/05-kap-haberler.md §C/§D) — `tf`/filtreden
+  // BAĞIMSIZ, tek seferlik fetch (ScanScreen'in tarama verisi fetch'iyle AYNI mimari:
+  // konteyner fetch eder, NewsPanel/NewsList yalnızca gösterir). `null` = henüz
+  // yüklenmedi; `fetchNewsFeed()` HİÇBİR ZAMAN reddetmez (bkz. lib/news.ts) — ağ hatası
+  // burada da sessizce boş diziye düşer, ayrı bir "hata" durumu YOK (haber yardımcı bir
+  // özellik, ana tarama verisinin aksine kullanıcıyı teknik hatayla telaşlandırmaz).
+  const [newsFeed, setNewsFeed] = useState<NewsItem[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchNewsFeed().then((items) => {
+      if (!cancelled) setNewsFeed(items);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     function check() {
@@ -347,45 +384,78 @@ export default function ScanScreen({ initialTf, initialData }: ScanScreenProps) 
       {isMobile ? (
         <div style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
           <DelayStrip />
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 8,
-              padding: "10px 14px 0",
-              flex: "none",
-            }}
-          >
-            <button
-              type="button"
-              className="btn btn-secondary btn-lg"
-              onClick={() => setFilterSheetOpen(true)}
-              style={{ position: "relative", gap: 8 }}
-            >
-              <FunnelSimple size={16} />
-              Filtrele
-              {activeFilterCount > 0 ? <span className="filter-badge">{activeFilterCount}</span> : null}
-            </button>
-            <SortMenu sortKey={sortKey} onSelect={handleSortMenuSelect} />
+          {/* Hisseler/Haberler sekmesi (bkz. tasks/05-kap-haberler.md §D) — sağ haber
+              paneli mobilde olmaz, yerine liste üstünde bir geçiş. Mevcut `.seg`/
+              `.seg-lg` sınıfları (TopBar'daki zaman dilimi kontrolüyle AYNI) yeniden
+              kullanılır — yeni CSS gerekmez, dokunma hedefi zaten ≥44px. */}
+          <div style={{ display: "flex", padding: "10px 14px 0", flex: "none" }}>
+            <div className="seg seg-lg" style={{ flex: "none" }}>
+              <button
+                type="button"
+                className={`seg-btn${mobileTab === "hisseler" ? " active" : ""}`}
+                onClick={() => setMobileTab("hisseler")}
+              >
+                Hisseler
+              </button>
+              <button
+                type="button"
+                className={`seg-btn${mobileTab === "haberler" ? " active" : ""}`}
+                onClick={() => setMobileTab("haberler")}
+              >
+                Haberler
+              </button>
+            </div>
           </div>
-          <div style={{ padding: "8px 14px 0", flex: "none", fontSize: 12.5, color: "var(--color-neutral-400)" }}>
-            <strong style={{ color: "var(--color-text)", fontVariantNumeric: "tabular-nums" }}>
-              {sortedRows.length}
-            </strong>{" "}
-            / {allRows.length} hisse eşleşti
-            {isLoading ? " · yükleniyor…" : ""}
-            {fetchError ? ` · hata: ${fetchError}` : ""}
-          </div>
-          {sortedRows.length === 0 && !isLoading ? (
-            <EmptyState onReset={handleReset} />
-          ) : (
-            <MobileList
-              rows={sortedRows}
-              visibleCount={visibleCount}
-              onLoadMore={() => setVisibleCount((c) => Math.min(c + MOBILE_PAGE_SIZE, sortedRows.length))}
+          {mobileTab === "haberler" ? (
+            <NewsList
+              items={newsFeed}
               onSelectSymbol={setSelectedSymbol}
+              emptyText="Son 7 günde KAP bildirimi yok."
+              variant="mobile"
             />
+          ) : (
+            <>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 8,
+                  padding: "10px 14px 0",
+                  flex: "none",
+                }}
+              >
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-lg"
+                  onClick={() => setFilterSheetOpen(true)}
+                  style={{ position: "relative", gap: 8 }}
+                >
+                  <FunnelSimple size={16} />
+                  Filtrele
+                  {activeFilterCount > 0 ? <span className="filter-badge">{activeFilterCount}</span> : null}
+                </button>
+                <SortMenu sortKey={sortKey} onSelect={handleSortMenuSelect} />
+              </div>
+              <div style={{ padding: "8px 14px 0", flex: "none", fontSize: 12.5, color: "var(--color-neutral-400)" }}>
+                <strong style={{ color: "var(--color-text)", fontVariantNumeric: "tabular-nums" }}>
+                  {sortedRows.length}
+                </strong>{" "}
+                / {allRows.length} hisse eşleşti
+                {isLoading ? " · yükleniyor…" : ""}
+                {fetchError ? ` · hata: ${fetchError}` : ""}
+              </div>
+              {sortedRows.length === 0 && !isLoading ? (
+                <EmptyState onReset={handleReset} />
+              ) : (
+                <MobileList
+                  rows={sortedRows}
+                  visibleCount={visibleCount}
+                  onLoadMore={() => setVisibleCount((c) => Math.min(c + MOBILE_PAGE_SIZE, sortedRows.length))}
+                  onSelectSymbol={setSelectedSymbol}
+                />
+              )}
+            </>
           )}
         </div>
       ) : (
@@ -422,6 +492,7 @@ export default function ScanScreen({ initialTf, initialData }: ScanScreenProps) 
               {sortedRows.length === 0 && !isLoading ? <EmptyState onReset={handleReset} /> : null}
             </div>
           </div>
+          <NewsPanel items={newsFeed} onSelectSymbol={setSelectedSymbol} />
         </div>
       )}
       {filterSheetOpen ? (

@@ -4,6 +4,7 @@
  * matematik tipi değil, sadece isimlendirme paylaşımı içindir.
  */
 import type { ChartSeries, ScoreComponent, Signal, Timeframe } from "../src/engine/types.ts";
+import type { Importance } from "./news-importance";
 
 export type { ChartSeries, ScoreComponent, Signal, Timeframe };
 
@@ -38,6 +39,14 @@ export interface RowData {
    * (bkz. `lib/scan-data.ts`).
    */
   topReason: string;
+  /**
+   * Son 7 gündeki KAP bildirim sayısı ("gizli" sınıf hariç, KAPSIZ — bkz.
+   * tasks/05-kap-haberler.md §C "HABER kolonu"). `scripts/build-news.ts`'in yazdığı
+   * `public/data/news/_counts.json` dosyasından `lib/scan-data.ts` içinde okunur; o
+   * dosya henüz üretilmemişse (ör. `build:news` hiç çalışmadıysa) 0 varsayılır —
+   * bildirim script'i tarama script'inden önce/sonra çalışsa da derleme bozulmaz.
+   */
+  newsCount: number;
 }
 
 export interface ScanResult {
@@ -123,7 +132,8 @@ export type SortKey =
   | "rsi"
   | "atrPct"
   | "relVol"
-  | "pctB";
+  | "pctB"
+  | "newsCount";
 
 export type SortDir = 1 | -1;
 
@@ -133,3 +143,26 @@ export type SortDir = 1 | -1;
  * İkisini ayırmak önemli: kullanıcı basıp hiçbir şey olmadığını sanmasın.
  */
 export type RefreshState = "idle" | "loading" | "updated" | "current" | "error";
+
+/**
+ * Tek bir KAP bildirimi, arayüz için hazırlanmış hâli — bkz. tasks/05-kap-haberler.md
+ * §A. `public/data/news-feed.json` (piyasa akışı) ve `public/data/news/{SEMBOL}.json`
+ * (hisse başına) dosyalarının öğe şekli; `scripts/build-news.ts` üretir,
+ * `src/providers/kap.ts`teki `Disclosure`den türetilir (motor tipi değil, yalnızca
+ * KAP sağlayıcısının çıktısı) + `importance` alanı `lib/news-importance.ts`teki
+ * `classifyImportance()`in sonucu. Metinler (`title`/`subject`/`summary`) KAP'ın kendi
+ * ifadesiyle birebir aktarılır — LLM ile özetlenmez/yorumlanmaz (bkz. görev "Kapsam
+ * dışı").
+ */
+export interface NewsItem {
+  /** KAP'ın tekil bildirim kimliği (bkz. `Disclosure.index`). */
+  index: number;
+  /** Epoch ms (Europe/Istanbul saatinden çevrilmiş). */
+  publishedAt: number;
+  title: string;
+  subject: string;
+  summary: string | null;
+  /** İlgili hisse kodları (boş dizi olabilir — o zaman haber chip'siz gösterilir). */
+  symbols: string[];
+  importance: Importance;
+}

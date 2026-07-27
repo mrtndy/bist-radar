@@ -29,7 +29,9 @@ import {
   formatRatio1,
   formatVolumeMn,
 } from "../lib/format";
-import type { DetailData, ScoreComponent, Timeframe } from "../lib/types";
+import { fetchStockNews, formatNewsTime } from "../lib/news";
+import { importanceTagStyle } from "../lib/news-importance";
+import type { DetailData, NewsItem, ScoreComponent, Timeframe } from "../lib/types";
 
 // bkz. components/ScanScreen.tsx — statik export'ta alt dizin (GitHub Pages) desteği
 // için aynı örüntü; derleme zamanında istemci paketine gömülür.
@@ -58,6 +60,13 @@ interface DetailDrawerProps {
 export default function DetailDrawer({ symbol, tf, onClose }: DetailDrawerProps) {
   const [data, setData] = useState<DetailData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Şirket haberleri (bkz. tasks/05-kap-haberler.md §B — "EN ÖNEMLİ PARÇA"). `tf`den
+  // BAĞIMSIZ ayrı bir efekt: haber, zaman dilimi değişince yeniden çekilmez, yalnızca
+  // sembol değişince (panel açıldığında `${BASE_PATH}/data/news/{SEMBOL}.json`, bkz.
+  // görev §B). `fetchStockNews()` HİÇBİR ZAMAN reddetmez (bkz. lib/news.ts) — haber
+  // yoksa/ağ hatasında boş dizi döner, bu da doğal olarak "Son 7 günde KAP bildirimi
+  // yok" mesajına düşer; ayrı bir hata durumu YOK (bkz. lib/news.ts yorumu).
+  const [news, setNews] = useState<NewsItem[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -78,6 +87,17 @@ export default function DetailDrawer({ symbol, tf, onClose }: DetailDrawerProps)
       cancelled = true;
     };
   }, [symbol, tf]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setNews(null);
+    fetchStockNews(symbol).then((items) => {
+      if (!cancelled) setNews(items);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [symbol]);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -176,7 +196,7 @@ export default function DetailDrawer({ symbol, tf, onClose }: DetailDrawerProps)
           )}
         </div>
 
-        {data ? <DrawerBody data={data} /> : null}
+        {data ? <DrawerBody data={data} news={news} /> : null}
       </div>
     </div>
   );
@@ -207,7 +227,7 @@ function DelayNotice() {
   );
 }
 
-function DrawerBody({ data }: { data: DetailData }) {
+function DrawerBody({ data, news }: { data: DetailData; news: NewsItem[] | null }) {
   const vmax = Math.max(...data.chart.bars.map((b) => b.v)) || 1;
 
   return (
@@ -262,6 +282,82 @@ function DrawerBody({ data }: { data: DetailData }) {
           ))}
         </div>
       </Section>
+
+      <Section title="Şirket haberleri">
+        <CompanyNews news={news} />
+      </Section>
+    </div>
+  );
+}
+
+/**
+ * Şirket haberleri (bkz. tasks/05-kap-haberler.md §B "EN ÖNEMLİ PARÇA" — "bu hisse
+ * neden hareketlendi?" sorusunun cevabı). `NewsList`teki panel/mobile varyantlarından
+ * BİLEREK ayrı: burada gezinme çip'i YOK (zaten bu hissenin kendi panelindeyiz, kendi
+ * sembolüne tıklamak anlamsız) ve tasarım şartnamesi (§ "2. Hisse detay paneli" madde
+ * 7) sabit 64px zaman sütunlu, temel çizgi hizalı farklı bir satır düzeni tanımlıyor.
+ * Metin KAP'ın kendi ifadesiyle: `subject` birincil, `summary` (varsa) ikincil (bkz.
+ * görev §B "konu + varsa özet").
+ */
+function CompanyNews({ news }: { news: NewsItem[] | null }) {
+  if (news === null) {
+    return <div style={{ fontSize: 12.5, color: "var(--color-neutral-400)" }}>Yükleniyor…</div>;
+  }
+  if (news.length === 0) {
+    return <div style={{ fontSize: 12.5, color: "var(--color-neutral-400)" }}>Son 7 günde KAP bildirimi yok.</div>;
+  }
+  return (
+    <div style={{ display: "flex", flexDirection: "column" }}>
+      {news.map((item) => {
+        const style = importanceTagStyle(item.importance);
+        const text = item.subject || item.title || "Bildirim";
+        return (
+          <div
+            key={item.index}
+            style={{
+              padding: "9px 0",
+              borderBottom: "1px solid color-mix(in oklab, var(--color-neutral-800) 55%, transparent)",
+              display: "flex",
+              gap: 10,
+              alignItems: "baseline",
+            }}
+          >
+            <span
+              style={{
+                fontSize: 10.5,
+                color: "var(--color-neutral-500)",
+                fontVariantNumeric: "tabular-nums",
+                flex: "none",
+                width: 64,
+              }}
+            >
+              {formatNewsTime(item.publishedAt)}
+            </span>
+            <span
+              style={{
+                fontSize: 10.5,
+                color: style.color,
+                border: style.border,
+                background: style.background,
+                borderRadius: 99,
+                padding: "1px 7px",
+                flex: "none",
+              }}
+            >
+              KAP
+            </span>
+            <span style={{ fontSize: 12.3, lineHeight: 1.45, color: "var(--color-neutral-200)" }}>
+              {text}
+              {item.summary ? (
+                <>
+                  <br />
+                  <span style={{ color: "var(--color-neutral-400)", fontSize: 11.5 }}>{item.summary}</span>
+                </>
+              ) : null}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }

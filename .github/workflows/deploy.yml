@@ -91,6 +91,14 @@ jobs:
       - name: Motor parity testi
         run: node scripts/parity.ts
 
+      # SIRA ÖNEMLİ: build:news, build:data'dan ÖNCE çalışmalı. build:news
+      # public/data/news/_counts.json'u yazar, build:data da tablodaki HABER
+      # kolonunu oradan doldurur. Ters sırada kolon bir önceki koşunun sayılarını
+      # gösterir. Script ağ hatasında boş ama geçerli dosya üretip 0 ile döner,
+      # yani KAP erişilemezse site haberler olmadan yine yayınlanır.
+      - name: KAP haberlerini çek
+        run: npm run build:news
+
       - name: Tarama JSON'larını üret
         run: npm run build:data
 

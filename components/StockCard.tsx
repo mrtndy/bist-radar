@@ -56,19 +56,32 @@ export default function StockCard({ row, onSelect }: StockCardProps) {
       </div>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-        <span
-          className="tag"
-          style={{
-            background: `color-mix(in oklab, ${signalTagColor(row.signal)} 13%, transparent)`,
-            color: signalTagColor(row.signal),
-            border: `1px solid color-mix(in oklab, ${signalTagColor(row.signal)} 35%, transparent)`,
-            fontSize: 11.5,
-            fontWeight: 600,
-            letterSpacing: "0.04em",
-          }}
-        >
-          {row.signal}
-        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+          <span
+            className="tag"
+            style={{
+              background: `color-mix(in oklab, ${signalTagColor(row.signal)} 13%, transparent)`,
+              color: signalTagColor(row.signal),
+              border: `1px solid color-mix(in oklab, ${signalTagColor(row.signal)} 35%, transparent)`,
+              fontSize: 11.5,
+              fontWeight: 600,
+              letterSpacing: "0.04em",
+            }}
+          >
+            {row.signal}
+          </span>
+          {/* Son 7 gündeki KAP bildirim sayısı (bkz. tasks/05-kap-haberler.md §D) —
+              kullanıcı hangi hissede haber olduğunu listeden görebilsin. Yeşil/kırmızı
+              KULLANILMAZ (nötr + accent tonu, bkz. görev "Sert kısıtlar"). */}
+          {row.newsCount > 0 ? (
+            <span
+              className="tag tag-neutral"
+              style={{ fontSize: 11, color: "var(--color-accent-200)", whiteSpace: "nowrap" }}
+            >
+              {row.newsCount} bildirim
+            </span>
+          ) : null}
+        </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <div
             style={{

@@ -41,6 +41,13 @@ const COLUMNS: Column[] = [
   { key: "atrPct", label: "ATR %", align: "right", sortable: true, title: "ATR / fiyat" },
   { key: "relVol", label: "R.HACİM", align: "right", sortable: true, title: "Hacim / 20 bar ortalaması" },
   { key: "pctB", label: "%B", align: "right", sortable: true, title: "Bollinger %B", className: "col-pctb" },
+  {
+    key: "newsCount",
+    label: "HABER",
+    align: "right",
+    sortable: true,
+    title: "Son 7 gündeki KAP bildirim sayısı (rutin/ilgisiz bildirimler hariç)",
+  },
 ];
 
 interface ScanTableProps {
@@ -182,6 +189,11 @@ export default function ScanTable({
             </td>
             <td className="col-pctb" style={{ textAlign: "right", color: "var(--color-neutral-300)" }}>
               {formatDecimal2(r.pctB)}
+            </td>
+            <td style={{ textAlign: "right" }}>
+              <span style={{ color: r.newsCount > 0 ? "var(--color-accent-200)" : "var(--color-neutral-500)" }}>
+                {formatInt(r.newsCount)}
+              </span>
             </td>
           </tr>
         ))}

@@ -30,7 +30,7 @@ import {
   formatVolumeMn,
 } from "../lib/format";
 import { useExcludedEntry } from "../lib/excluded";
-import { fetchStockNews, formatNewsTime } from "../lib/news";
+import { fetchStockNews, formatNewsTime, kapDisclosureUrl } from "../lib/news";
 import { importanceTagStyle } from "../lib/news-importance";
 import type { DetailData, NewsItem, ScoreComponent, Timeframe } from "../lib/types";
 import ExcludedNotice from "./ExcludedNotice";
@@ -377,6 +377,25 @@ function CompanyNews({ news }: { news: NewsItem[] | null }) {
                   <span style={{ color: "var(--color-neutral-400)", fontSize: 11.5 }}>{item.summary}</span>
                 </>
               ) : null}
+              {/* Bildirimin aslına götürür — buradaki metin KAP'ın özeti, tamamı değil. */}
+              <br />
+              <a
+                href={kapDisclosureUrl(item.index)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="news-chip"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  minHeight: 34,
+                  marginTop: 5,
+                  fontSize: 11.5,
+                  textDecoration: "none",
+                }}
+                title="Bildirimin tamamını KAP sitesinde aç"
+              >
+                KAP&apos;ta oku ↗
+              </a>
             </span>
           </div>
         );

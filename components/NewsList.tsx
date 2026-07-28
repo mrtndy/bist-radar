@@ -21,7 +21,7 @@
  * (bkz. görev §B "konu + varsa özet" sırası).
  */
 import { importanceTagStyle } from "../lib/news-importance";
-import { formatNewsTime } from "../lib/news";
+import { formatNewsTime, kapDisclosureUrl } from "../lib/news";
 import type { NewsItem } from "../lib/types";
 
 interface NewsListProps {
@@ -89,6 +89,32 @@ function SourcePill({ item }: { item: NewsItem }) {
   );
 }
 
+/**
+ * "KAP'ta oku" — bildirimin aslına götürür. Yeni sekmede açılır ki kullanıcı
+ * uygulamadan çıkmasın (yaşlıca bir kullanıcı için geri dönmeyi bulmak zahmetli).
+ * Metinli, sadece ikon değil: ne yaptığı okunabilir olmalı.
+ */
+function KapLink({ index, big = false }: { index: number; big?: boolean }) {
+  if (!Number.isFinite(index)) return null;
+  return (
+    <a
+      href={kapDisclosureUrl(index)}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="news-chip"
+      onClick={(e) => e.stopPropagation()}
+      style={
+        big
+          ? { minHeight: 44, display: "inline-flex", alignItems: "center", fontSize: 13, textDecoration: "none" }
+          : { textDecoration: "none" }
+      }
+      title="Bildirimin tamamını KAP sitesinde aç"
+    >
+      KAP&apos;ta oku ↗
+    </a>
+  );
+}
+
 /** Masaüstü sağ panel satırı — design_handoff "Sağ haber paneli" ile birebir. */
 function PanelNewsRow({ item, onSelectSymbol }: { item: NewsItem; onSelectSymbol: (symbol: string) => void }) {
   const text = item.subject || item.title || "Bildirim";
@@ -112,15 +138,14 @@ function PanelNewsRow({ item, onSelectSymbol }: { item: NewsItem; onSelectSymbol
       {item.summary ? (
         <div style={{ fontSize: 11.5, lineHeight: 1.4, color: "var(--color-neutral-400)" }}>{item.summary}</div>
       ) : null}
-      {item.symbols.length > 0 ? (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-          {item.symbols.map((sym) => (
-            <button key={sym} type="button" className="news-chip" onClick={() => onSelectSymbol(sym)}>
-              {sym} →
-            </button>
-          ))}
-        </div>
-      ) : null}
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
+        {item.symbols.map((sym) => (
+          <button key={sym} type="button" className="news-chip" onClick={() => onSelectSymbol(sym)}>
+            {sym} →
+          </button>
+        ))}
+        <KapLink index={item.index} />
+      </div>
     </div>
   );
 }
@@ -169,18 +194,39 @@ function MobileNewsCard({ item, onSelectSymbol }: { item: NewsItem; onSelectSymb
     </>
   );
 
-  if (!primary) {
-    return <div style={{ ...cardStyle, cursor: "default" }}>{body}</div>;
-  }
-
+  // Kart bir <button> DEĞİL, içinde buton olan bir <div>: KAP bağlantısı (<a>) bir
+  // <button> içine konamaz (geçersiz HTML, tıklama davranışı da bozulur). Gövdenin
+  // tamamı yine tek dokunuşla hissenin detayını açar — sadece sarmalayıcı değişti.
   return (
-    <button
-      type="button"
-      style={{ ...cardStyle, cursor: "pointer", appearance: "none" }}
-      onClick={() => onSelectSymbol(primary)}
-      title={extra.length ? `${primary} (+${extra.length}) hissesinin detayını aç` : `${primary} hissesinin detayını aç`}
-    >
-      {body}
-    </button>
+    <div style={{ ...cardStyle, gap: 10 }}>
+      {primary ? (
+        <button
+          type="button"
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 8,
+            width: "100%",
+            textAlign: "left",
+            background: "none",
+            border: "none",
+            padding: 0,
+            font: "inherit",
+            color: "inherit",
+            cursor: "pointer",
+            appearance: "none",
+          }}
+          onClick={() => onSelectSymbol(primary)}
+          title={extra.length ? `${primary} (+${extra.length}) hissesinin detayını aç` : `${primary} hissesinin detayını aç`}
+        >
+          {body}
+        </button>
+      ) : (
+        body
+      )}
+      <div style={{ display: "flex" }}>
+        <KapLink index={item.index} big />
+      </div>
+    </div>
   );
 }

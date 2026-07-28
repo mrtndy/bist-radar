@@ -53,3 +53,15 @@ export function formatNewsTime(ms: number): string {
   if (!Number.isFinite(ms)) return "—";
   return timeFmt.format(new Date(ms));
 }
+
+/**
+ * Bir KAP bildiriminin kendi sayfası.
+ *
+ * Doğrulama (2026-07-28): bu adres HTTP 200 ve ~122 KB'lık gerçek bir belge döndürüyor;
+ * karşılaştırma için yanlış adresler 12,8 KB'lık Next.js hata kabuğu dönüyor. Sayfanın
+ * içeriği JavaScript ile render edildiği için başsız/sandbox tarayıcıda boş görünüyor —
+ * KAZIMA amacıyla KULLANILMAZ, yalnızca kullanıcıyı bildirimin aslına götürür.
+ */
+export function kapDisclosureUrl(index: number): string {
+  return `https://www.kap.org.tr/tr/Bildirim/${index}`;
+}
